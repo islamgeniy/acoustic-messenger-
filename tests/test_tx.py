@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import subprocess
-import sys
 
 import numpy as np
 import pytest
@@ -30,7 +28,7 @@ def _dominant_freq_hz(segment: np.ndarray, sample_rate: int) -> float:
 def test_validate_bits_rules() -> None:
     assert validate_bits(DEFAULT_TEST_BITS) == DEFAULT_TEST_BITS
     assert validate_bits("1011 0010 11100101 01101001 10010110") == DEFAULT_TEST_BITS
-    assert validate_bits("1011", allow_short=True) == "1011"
+    assert validate_bits("1011", min_bits=4) == "1011"
 
     with pytest.raises(ValueError, match="at least 32"):
         validate_bits("1011")
@@ -63,7 +61,7 @@ def test_slide4_example_1011_and_continuous_tone() -> None:
         trail_silence=0.0,
         amplitude=0.8,
     )
-    sig = modulate_fsk("1011", cfg, allow_short=True)
+    sig = modulate_fsk("1011", cfg, min_bits=4)
     spb = cfg.samples_per_bit
 
     assert sig.size == 4 * spb
@@ -133,27 +131,10 @@ def test_encode_to_wav_and_metadata_roundtrip(tmp_path: Path) -> None:
     assert loaded_meta.text == "IUT!"
 
 
-def test_cli_encode_message(tmp_path: Path) -> None:
+def test_cli_encode_message(tmp_path: Path, run_script) -> None:
     out_wav = tmp_path / "cli_test.wav"
-    script = Path(__file__).resolve().parent.parent / "scripts" / "encode_message.py"
-    proc = subprocess.run(
-        [
-            sys.executable,
-            str(script),
-            "--bits",
-            DEFAULT_TEST_BITS,
-            "--f0",
-            "1000",
-            "--f1",
-            "2000",
-            "-o",
-            str(out_wav),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert "2-FSK Acoustic Transmitter" in proc.stdout
+    stdout = run_script("encode_message.py", "--bits", DEFAULT_TEST_BITS, "--f0", 1000, "--f1", 2000, "-o", out_wav)
+    assert "2-FSK Acoustic Transmitter" in stdout
     assert out_wav.exists()
     assert out_wav.with_suffix(".json").exists()
 

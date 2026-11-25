@@ -11,7 +11,7 @@ Each teammate owns one independent feature branch and opens a Pull Request into 
    - Files: `src/tx.py`, `scripts/encode_message.py`
    - Experiment: **Exp 2 — Tone Separation ($\Delta f = f_1 - f_0$)**
 3. **`rx-decoder` — Mirobidov Mirakbar**
-   - Files: `src/rx.py`, `scripts/decode_recording.py`, `tests/test_loopback.py`
+   - Files: `src/rx.py`, `src/sync.py`, `scripts/decode_recording.py`, `tests/test_loopback.py`
    - Experiment: **Exp 3 — Background Interference**
 4. **`eval-plots` — Malikov Amirxon**
    - Files: `src/plotting.py`, `src/experiments.py`, `scripts/run_experiment_analysis.py`

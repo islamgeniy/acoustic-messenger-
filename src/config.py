@@ -123,6 +123,11 @@ class DecodeResult:
     def mean_margin_db(self) -> float:
         return float(np.mean([d.margin_db for d in self.bit_decisions]))
 
+    def summary(self) -> str:
+        """One line for the console, e.g. `start 0.500 s (auto) | errors 0/32 | BER 0.0% | margin 41.2 dB`."""
+        score = f" | errors {self.bit_errors}/{len(self.bit_decisions)} | BER {self.ber:.1%}" if self.ber is not None else ""
+        return f"start {self.start_time:.3f} s ({self.sync_method}){score} | margin {self.mean_margin_db:.1f} dB"
+
 
 @dataclass
 class TrialRecord:

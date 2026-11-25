@@ -5,8 +5,6 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-import subprocess
-import sys
 
 import numpy as np
 
@@ -50,15 +48,10 @@ def test_manifest_evaluation_retains_failed_trials_and_generates_plots(tmp_path:
         assert p.exists() and p.stat().st_size > 1_000
 
 
-def test_decode_cli_writes_diagnostic_plots(tmp_path: Path) -> None:
+def test_decode_cli_writes_diagnostic_plots(tmp_path: Path, run_script) -> None:
     tx_wav, tx_meta, _, _ = encode_to_wav(tmp_path / "single.wav", bits=DEFAULT_TEST_BITS)
     out_dir = tmp_path / "plots"
-    script = Path(__file__).resolve().parent.parent / "scripts" / "decode_recording.py"
-
-    proc = subprocess.run(
-        [sys.executable, str(script), str(tx_wav), "--meta", str(tx_meta), "--plot-dir", str(out_dir)],
-        capture_output=True, text=True, check=True,
-    )
-    assert "BER             : 0.0000 (0.00%)" in proc.stdout
+    stdout = run_script("decode_recording.py", tx_wav, "--meta", tx_meta, "--plot-dir", out_dir)
+    assert "BER             : 0.0000 (0.00%)" in stdout
     for kind in ("waveform", "spectrogram", "bit_decisions", "bit_spectra"):
         assert (out_dir / f"single_{kind}.png").exists()

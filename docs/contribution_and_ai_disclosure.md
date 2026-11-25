@@ -14,7 +14,7 @@ Branches and controlled experiments were randomly assigned across all four membe
 | :--- | :--- | :--- | :--- |
 | **Shuhratov Abdulloh** | `dft-validation` | Direct $O(N^2)$ DFT (`src/dft.py`), validation script (`scripts/run_dft_validation.py`), DFT unit tests (`tests/test_dft.py`), and Fourier diagnostic figures. | **Exp 1: Bit Duration ($T_b$)** — testing $\Delta f = 1/T_b$ and room reverberation limits. |
 | **Xojambetov Islam** | `tx-encoder` | Continuous-phase 2-FSK transmitter (`src/tx.py`), transmitter CLI (`scripts/encode_message.py`), TX unit tests (`tests/test_tx.py`), repository integration & PR review. | **Exp 2: Tone Separation ($\Delta f = f_1 - f_0$)** — testing frequency resolution and spectral leakage. |
-| **Mirobidov Mirakbar** | `rx-decoder` | 2-FSK receiver (`src/rx.py`), manual & automatic (in-band energy onset) sync, BER and decision-margin computation, receiver CLI (`scripts/decode_recording.py`), loopback tests (`tests/test_loopback.py`). | **Exp 3: Background Interference** — comparing out-of-band vs. in-band acoustic interference. |
+| **Mirobidov Mirakbar** | `rx-decoder` | 2-FSK receiver (`src/rx.py`), manual & automatic (in-band energy onset, `src/sync.py`) sync, BER and decision-margin computation, receiver CLI (`scripts/decode_recording.py`), loopback tests (`tests/test_loopback.py`). | **Exp 3: Background Interference** — comparing out-of-band vs. in-band acoustic interference. |
 | **Malikov Amirxon** | `eval-plots` | Plotting suite (`src/plotting.py`), experiment runner & CSV logger (`src/experiments.py`, `scripts/run_experiment_analysis.py`), evaluation tests (`tests/test_eval_plots.py`). | **Exp 4: Distance & Position** — acoustic attenuation, NLOS frequency selectivity, and room reverb analysis. |
 
 ---

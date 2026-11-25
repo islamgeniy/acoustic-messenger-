@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-import subprocess
-import sys
 
 import numpy as np
 import pytest
 from scipy.signal import resample_poly
 
 from src.config import DEFAULT_TEST_BITS, ModulationConfig
-from src.rx import compute_ber, decode_signal, decode_wav
+from src.audio_io import load_wav
+from src.rx import compute_ber, decode_signal, decode_transmission
 from src.tx import bits_to_text, encode_to_wav, modulate_fsk, text_to_bits
 
 
@@ -28,7 +27,7 @@ def test_compute_ber_exact() -> None:
 
 def test_slide4_1011_clean_loopback() -> None:
     cfg = ModulationConfig(lead_silence=0.2, trail_silence=0.2)
-    sig = modulate_fsk("1011", cfg, allow_short=True)
+    sig = modulate_fsk("1011", cfg, min_bits=4)
 
     res = decode_signal(sig, cfg.sample_rate, num_bits=4, config=cfg, start_time=0.2, expected_bits="1011")
     assert res.decoded_bits == "1011"
@@ -83,21 +82,15 @@ def test_narrow_tone_separation_and_degradation() -> None:
     assert res_bad.ber is not None and res_bad.ber > 0.0
 
 
-def test_decode_wav_and_cli_on_baseline(tmp_path: Path) -> None:
+def test_decode_saved_wav_and_cli_on_baseline(tmp_path: Path, run_script) -> None:
     out_wav = tmp_path / "loopback.wav"
     wav_path, meta_path, meta, _ = encode_to_wav(out_wav, bits=DEFAULT_TEST_BITS)
 
-    res, _, _ = decode_wav(wav_path, len(meta.bits), meta.config, expected_bits=meta.bits)
+    sample_rate, recording = load_wav(wav_path)
+    res = decode_transmission(recording, sample_rate, meta)
     assert res.ber == 0.0
 
-    script = Path(__file__).resolve().parent.parent / "scripts" / "decode_recording.py"
-    proc = subprocess.run(
-        [sys.executable, str(script), str(wav_path), "--meta", str(meta_path)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert "BER             : 0.0000 (0.00%)" in proc.stdout
+    assert "BER             : 0.0000 (0.00%)" in run_script("decode_recording.py", wav_path, "--meta", meta_path)
 
 
 def test_auto_sync_with_short_silence() -> None:

@@ -23,7 +23,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.audio_io import load_metadata, record_audio, save_wav
 from src.config import DEFAULT_SAMPLE_RATE
-from src.rx import decode_wav
+from src.rx import decode_transmission
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -79,14 +79,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.decode_meta is not None:
         meta = load_metadata(args.decode_meta)
-        res, _, _ = decode_wav(out_wav, len(meta.bits), meta.config, start_time=args.start_time, expected_bits=meta.bits)
-        print("\n=== Immediate Decode Result ===")
-        print(f"Sync         : {res.sync_method} (start = {res.start_time:.4f} s)")
-        print(f"Decoded bits : {res.decoded_bits}")
+        result = decode_transmission(audio, args.sample_rate, meta, args.start_time)
+        print(f"Decoded bits : {result.decoded_bits}")
         print(f"Expected     : {meta.bits}")
-        print(f"Bit errors   : {res.bit_errors} / {len(meta.bits)}")
-        print(f"BER          : {res.ber:.4f} ({res.ber * 100:.2f}%)")
-        print(f"Mean margin  : {res.mean_margin_db:.1f} dB")
+        print(result.summary())
 
     return 0
 

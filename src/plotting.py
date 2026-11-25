@@ -23,7 +23,8 @@ from src.rx import bit_segment, bit_spectrum, tone_magnitudes
 COLOR_F0, COLOR_F1, COLOR_ERROR = "#1f77b4", "#ff7f0e", "#d62728"
 
 
-def _save(fig: plt.Figure, path: str | Path) -> Path:
+def save_figure(fig: plt.Figure, path: str | Path) -> Path:
+    """Lay out, save at 160 dpi (creating folders), and close the figure."""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
@@ -57,7 +58,7 @@ def plot_waveform(signal: np.ndarray, sample_rate: int, result: DecodeResult, pa
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Normalized Amplitude")
     ax.grid(True, alpha=0.25)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def plot_spectrogram(signal: np.ndarray, sample_rate: int, result: DecodeResult, path: str | Path, title: str) -> Path:
@@ -78,7 +79,7 @@ def plot_spectrogram(signal: np.ndarray, sample_rate: int, result: DecodeResult,
     ax.set_ylabel("Frequency (Hz)")
     ax.set_title(title)
     ax.legend(loc="upper right", framealpha=0.85)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def plot_bit_decisions(result: DecodeResult, path: str | Path, title: str) -> Path:
@@ -106,7 +107,7 @@ def plot_bit_decisions(result: DecodeResult, path: str | Path, title: str) -> Pa
         ax.set_xticks(idx)
     ax.legend()
     ax.grid(True, axis="y", alpha=0.3)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def plot_bit_spectra(
@@ -135,7 +136,7 @@ def plot_bit_spectra(
         ax.legend(fontsize=8.5)
         ax.grid(True, alpha=0.3)
     fig.suptitle(title, fontsize=12)
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def plot_trial(signal: np.ndarray, sample_rate: int, result: DecodeResult, out_dir: str | Path, prefix: str) -> list[Path]:
@@ -195,7 +196,7 @@ def plot_experiment_performance(records: Sequence[TrialRecord], path: str | Path
     ax_margin.set_xlabel(xlabel)
     ax_margin.set_xticks(x)
     ax_margin.set_xticklabels(settings, rotation=12, ha="right")
-    return _save(fig, path)
+    return save_figure(fig, path)
 
 
 def plot_tone_magnitudes(results_by_setting: dict[str, list[DecodeResult]], path: str | Path, title: str) -> Path:
@@ -222,4 +223,4 @@ def plot_tone_magnitudes(results_by_setting: dict[str, list[DecodeResult]], path
     ax.set_title(title)
     ax.legend()
     ax.grid(True, axis="y", alpha=0.3)
-    return _save(fig, path)
+    return save_figure(fig, path)

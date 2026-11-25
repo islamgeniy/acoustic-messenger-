@@ -19,15 +19,16 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+from typing import Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.audio_io import load_metadata
-from src.config import ModulationConfig
+from src.audio_io import load_metadata, load_wav
+from src.config import DecodeResult, ModulationConfig
 from src.plotting import plot_trial
-from src.rx import decode_wav
+from src.rx import decode_signal
 from src.tx import bits_to_text
 
 
@@ -46,32 +47,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-
+def resolve_parameters(args: argparse.Namespace) -> tuple[ModulationConfig, Optional[str], Optional[int]]:
+    """Modulation settings, expected bits, and bit count: from --meta, overridden by explicit flags."""
     cfg, expected_bits = ModulationConfig(), args.expected_bits
     if args.meta is not None:
         meta = load_metadata(args.meta)
-        cfg = meta.config
-        expected_bits = expected_bits or meta.bits
+        cfg, expected_bits = meta.config, expected_bits or meta.bits
     cfg.f0 = args.f0 or cfg.f0
     cfg.f1 = args.f1 or cfg.f1
     cfg.bit_duration = args.bit_duration or cfg.bit_duration
-
     num_bits = args.num_bits or (len(expected_bits) if expected_bits else None)
-    if num_bits is None:
-        parser.error("Specify --num-bits, --expected-bits, or --meta.")
+    return cfg, expected_bits, num_bits
 
-    result, signal, sample_rate = decode_wav(
-        args.recording, num_bits, cfg, start_time=args.start_time, expected_bits=expected_bits
-    )
 
-    print("=== 2-FSK Acoustic Receiver ===")
-    print(f"Recording       : {args.recording}")
-    print(f"Sync method     : {result.sync_method} (start = {result.start_time:.4f} s)")
-    print(f"Frequencies     : 0 -> {cfg.f0:.1f} Hz | 1 -> {cfg.f1:.1f} Hz | Tb = {cfg.bit_duration:.4f} s")
-    print()
+def print_bit_table(result: DecodeResult) -> None:
+    """The Slide 5 table: magnitude near f0 and f1 and the decision, for every bit."""
     print(f"{'Bit':>3} | {'Interval (s)':>13} | {'Near f0':>9} | {'Near f1':>9} | {'Dec':>3} | {'Exp':>3} | {'OK':>3} | {'Margin dB':>9}")
     print("-" * 74)
     for d in result.bit_decisions:
@@ -81,13 +71,32 @@ def main(argv: list[str] | None = None) -> int:
             f"{d.decision:>3} | {d.expected or '-':>3} | {ok:>3} | {d.margin_db:9.1f}"
         )
 
-    print()
-    print(f"Decoded bits    : {result.decoded_bits}")
+
+def print_report(recording: Path, result: DecodeResult) -> None:
+    cfg = result.config
+    print("=== 2-FSK Acoustic Receiver ===")
+    print(f"Recording       : {recording}")
+    print(f"Sync method     : {result.sync_method} (start = {result.start_time:.4f} s)")
+    print(f"Frequencies     : 0 -> {cfg.f0:.1f} Hz | 1 -> {cfg.f1:.1f} Hz | Tb = {cfg.bit_duration:.4f} s\n")
+    print_bit_table(result)
+    print(f"\nDecoded bits    : {result.decoded_bits}")
     if result.ber is not None:
         print(f"Expected bits   : {result.expected_bits}")
         print(f"Bit errors      : {result.bit_errors} / {len(result.expected_bits)}")
         print(f"BER             : {result.ber:.4f} ({result.ber * 100:.2f}%)")
     print(f"Mean margin     : {result.mean_margin_db:.1f} dB")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    cfg, expected_bits, num_bits = resolve_parameters(args)
+    if num_bits is None:
+        parser.error("Specify --num-bits, --expected-bits, or --meta.")
+
+    sample_rate, signal = load_wav(args.recording)
+    result = decode_signal(signal, sample_rate, num_bits, cfg, start_time=args.start_time, expected_bits=expected_bits)
+    print_report(args.recording, result)
     if args.as_text and len(result.decoded_bits) % 8 == 0:
         print(f"Decoded text    : {bits_to_text(result.decoded_bits)!r}")
 

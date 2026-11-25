@@ -17,10 +17,10 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from src.audio_io import load_metadata
+from src.audio_io import load_metadata, load_wav
 from src.config import DecodeResult, TrialRecord
 from src.plotting import plot_experiment_performance, plot_tone_magnitudes, plot_trial
-from src.rx import decode_wav
+from src.rx import decode_transmission
 
 
 @dataclass
@@ -64,9 +64,8 @@ def load_manifest(manifest_path: str | Path) -> list[TrialSpec]:
 def evaluate_trial(spec: TrialSpec) -> Trial:
     """Decode one recording against its transmitted bits."""
     meta = load_metadata(spec.tx_meta)
-    result, signal, sample_rate = decode_wav(
-        spec.rx_wav, len(meta.bits), meta.config, start_time=spec.start_time, expected_bits=meta.bits
-    )
+    sample_rate, signal = load_wav(spec.rx_wav)
+    result = decode_transmission(signal, sample_rate, meta, spec.start_time)
     record = TrialRecord(
         experiment=spec.experiment,
         leader=spec.leader,
@@ -107,28 +106,29 @@ def evaluate_manifest(
     by_experiment: dict[str, list[Trial]] = defaultdict(list)
     for t in trials:
         by_experiment[t.spec.experiment].append(t)
-
-    plots: list[Path] = []
-    for name, exp_trials in by_experiment.items():
-        out_dir = Path(plots_root) / name
-        first = exp_trials[0].spec
-        results_by_setting: dict[str, list[DecodeResult]] = defaultdict(list)
-        for t in exp_trials:
-            results_by_setting[t.spec.setting].append(t.result)
-
-        plots.append(plot_experiment_performance(
-            [t.record for t in exp_trials], out_dir / f"{name}_ber_margin.png",
-            title=f"{name} ({first.factor}) — Led by {first.leader}", xlabel=first.factor,
-        ))
-        plots.append(plot_tone_magnitudes(
-            results_by_setting, out_dir / f"{name}_tone_magnitudes.png",
-            title=f"{name}: Received Tone Magnitudes per Setting",
-        ))
-
-        # Best trial (lowest BER, then highest margin) and most difficult trial (Slide 14)
-        ranked = sorted(exp_trials, key=lambda t: (t.record.ber, -t.record.mean_margin_db))
-        for label, t in (("best", ranked[0]), ("difficult", ranked[-1]))[: len(ranked)]:
-            prefix = f"{label}_{t.spec.setting.replace(' ', '_')}"
-            plots.extend(plot_trial(t.signal, t.sample_rate, t.result, out_dir, prefix))
-
+    plots = [path for name, group in by_experiment.items() for path in plot_experiment(name, group, Path(plots_root) / name)]
     return [t.record for t in trials], plots
+
+
+def plot_experiment(name: str, trials: Sequence[Trial], out_dir: Path) -> list[Path]:
+    """Performance and tone-magnitude plots, plus full diagnostics of the best and the most difficult trial."""
+    factor, leader = trials[0].spec.factor, trials[0].spec.leader
+    results_by_setting: dict[str, list[DecodeResult]] = defaultdict(list)
+    for t in trials:
+        results_by_setting[t.spec.setting].append(t.result)
+
+    plots = [
+        plot_experiment_performance([t.record for t in trials], out_dir / f"{name}_ber_margin.png",
+                                    title=f"{name} ({factor}) — Led by {leader}", xlabel=factor),
+        plot_tone_magnitudes(results_by_setting, out_dir / f"{name}_tone_magnitudes.png",
+                             title=f"{name}: Received Tone Magnitudes per Setting"),
+    ]
+    for label, t in best_and_most_difficult(trials):
+        plots.extend(plot_trial(t.signal, t.sample_rate, t.result, out_dir, f"{label}_{t.spec.setting.replace(' ', '_')}"))
+    return plots
+
+
+def best_and_most_difficult(trials: Sequence[Trial]) -> list[tuple[str, Trial]]:
+    """Lowest BER (ties: highest margin) and highest BER: the success and the failure case of Slide 14."""
+    ranked = sorted(trials, key=lambda t: (t.record.ber, -t.record.mean_margin_db))
+    return [("best", ranked[0])] if len(ranked) == 1 else [("best", ranked[0]), ("difficult", ranked[-1])]

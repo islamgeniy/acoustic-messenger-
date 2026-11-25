@@ -14,7 +14,7 @@
    - Air & room act as a linear time-invariant (LTI) channel with impulse response $h(t)$ (delay, inverse-square attenuation $1/r$, frequency-dependent absorption/diffraction, and multipath reverberation) plus additive room noise $w(t)$:
      $$y(t) = (s * h)(t) + w(t)$$
    - Laptop B microphone + ADC samples $y(t)$ into a recorded WAV file (even if recorded at 44.1 kHz instead of 48 kHz, the receiver adapts using the WAV's own `sample_rate`).
-3. **Synchronization & Slicing (`src/rx.py`):**
+3. **Synchronization (`src/sync.py`) & Slicing (`src/rx.py`):**
    - Locate payload start $t_0$ via either **manual `--start-time`** or **automatic in-band energy onset** (band-pass around $f_0$/$f_1$, then the first sustained rise of short-time RMS above the background noise).
    - Slice each bit interval $[t_0 + i T_b,\; t_0 + (i+1) T_b]$ with an optional 5% edge guard margin to avoid reverb spillover at transitions.
 4. **Windowing + FFT + Non-Coherent Detection (`src/rx.py`):**

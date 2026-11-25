@@ -24,13 +24,15 @@ import argparse
 from pathlib import Path
 import sys
 
+import numpy as np
+
 # Ensure repository root is importable when invoked as `python scripts/encode_message.py`
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.audio_io import play_audio
-from src.config import DEFAULT_TEST_BITS, TRANSMITTED_DIR, ModulationConfig
+from src.config import DEFAULT_TEST_BITS, MIN_REQUIRED_BITS, TRANSMITTED_DIR, ModulationConfig, TransmissionMetadata
 from src.tx import encode_to_wav
 
 
@@ -51,33 +53,36 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    cfg = ModulationConfig(f0=args.f0, f1=args.f1, bit_duration=args.bit_duration)
+def default_output_path(cfg: ModulationConfig) -> Path:
+    return TRANSMITTED_DIR / f"tx_f0_{cfg.f0:.0f}_f1_{cfg.f1:.0f}_tb_{cfg.bit_duration * 1000:.0f}ms.wav"
 
-    if args.output is not None:
-        out_path = args.output
-    else:
-        tag = f"f0_{cfg.f0:.0f}_f1_{cfg.f1:.0f}_tb_{cfg.bit_duration * 1000:.0f}ms"
-        out_path = TRANSMITTED_DIR / f"tx_{tag}.wav"
 
-    if args.text is not None:
-        wav_path, meta_path, metadata, signal = encode_to_wav(out_path, text=args.text, config=cfg, allow_short=args.allow_short)
-    else:
-        bits = args.bits if args.bits is not None else DEFAULT_TEST_BITS
-        wav_path, meta_path, metadata, signal = encode_to_wav(out_path, bits=bits, config=cfg, allow_short=args.allow_short)
-
-    active_dur = len(metadata.bits) * cfg.bit_duration
+def print_summary(metadata: TransmissionMetadata, signal: np.ndarray, wav_path: Path, meta_path: Path) -> None:
+    cfg = metadata.config
+    active_end = cfg.lead_silence + len(metadata.bits) * cfg.bit_duration
     print("=== 2-FSK Acoustic Transmitter ===")
     if metadata.text is not None:
         print(f"Text            : {metadata.text!r}")
     print(f"Payload bits    : {metadata.bits} ({len(metadata.bits)} bits)")
     print(f"Frequencies     : 0 -> {cfg.f0:.1f} Hz | 1 -> {cfg.f1:.1f} Hz (Δf = {abs(cfg.f1 - cfg.f0):.1f} Hz)")
     print(f"Bit duration    : {cfg.bit_duration:.4f} s ({cfg.samples_per_bit} samples/bit @ {cfg.sample_rate} Hz)")
-    print(f"Active window   : [{cfg.lead_silence:.3f} s, {cfg.lead_silence + active_dur:.3f} s] "
-          f"(total {len(signal) / cfg.sample_rate:.3f} s)")
+    print(f"Active window   : [{cfg.lead_silence:.3f} s, {active_end:.3f} s] (total {len(signal) / cfg.sample_rate:.3f} s)")
     print(f"Saved WAV       : {wav_path}")
     print(f"Saved metadata  : {meta_path}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    cfg = ModulationConfig(f0=args.f0, f1=args.f1, bit_duration=args.bit_duration)
+    out_path = args.output or default_output_path(cfg)
+    min_bits = 1 if args.allow_short else MIN_REQUIRED_BITS
+
+    if args.text is not None:
+        wav_path, meta_path, metadata, signal = encode_to_wav(out_path, text=args.text, config=cfg, min_bits=min_bits)
+    else:
+        bits = args.bits or DEFAULT_TEST_BITS
+        wav_path, meta_path, metadata, signal = encode_to_wav(out_path, bits=bits, config=cfg, min_bits=min_bits)
+    print_summary(metadata, signal, wav_path, meta_path)
 
     if args.play:
         print("Playing audio through default speaker...")

@@ -22,18 +22,21 @@ from pathlib import Path
 import sys
 import time
 
+import numpy as np
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.audio_io import load_metadata, load_wav, play_audio, record_audio, save_wav
-from src.config import DEFAULT_SAMPLE_RATE, RECORDED_DIR
-from src.rx import decode_signal
+from src.config import DEFAULT_SAMPLE_RATE, RECORDED_DIR, TransmissionMetadata
+from src.rx import decode_transmission
 
 TEMPLATE = RECORDED_DIR / "manifest_template.json"
 MANIFEST = RECORDED_DIR / "manifest.json"
 EXTRA_RECORD_SECONDS = 3.0   # recording = TX length + 3 s, covers the human reaction delay
 COUNTDOWN_SECONDS = 3
+MIN_CONFIDENT_MARGIN_DB = 10.0  # below this the tones are barely above the background
 
 SETUP = {
     "exp1_bit_duration": "0.5 m apart, speaker facing mic, quiet room. Only Tb changes (different TX file).",
@@ -46,14 +49,27 @@ SETUP = {
 }
 
 
+class QuitSession(Exception):
+    """The operator typed q."""
+
+
 def load_slots(experiment: str | None) -> list[dict]:
     """Trial slots from the manifest template, optionally for one experiment only."""
     slots = json.loads(TEMPLATE.read_text(encoding="utf-8"))
     return [s for s in slots if experiment is None or s["experiment"] == experiment]
 
 
+def select_slots(slots: list[dict], start: int, already_recorded: set[str]) -> list[tuple[int, dict]]:
+    """Number the slots 1..N (same numbers on both laptops) and keep those still to do."""
+    return [(n, s) for n, s in enumerate(slots, 1) if n >= start and s["rx_wav"] not in already_recorded]
+
+
 def load_manifest() -> list[dict]:
     return json.loads(MANIFEST.read_text(encoding="utf-8")) if MANIFEST.exists() else []
+
+
+def save_manifest(entries: list[dict]) -> None:
+    MANIFEST.write_text(json.dumps(entries, indent=2), encoding="utf-8")
 
 
 def upsert_manifest(entries: list[dict], entry: dict) -> list[dict]:
@@ -61,82 +77,88 @@ def upsert_manifest(entries: list[dict], entry: dict) -> list[dict]:
     return [e for e in entries if e["rx_wav"] != entry["rx_wav"]] + [entry]
 
 
-def announce(index: int, total: int, slot: dict, last_experiment: str | None) -> None:
-    if slot["experiment"] != last_experiment:
-        print(f"\n######## {slot['experiment']} (leader: {slot['leader']}) ########")
-        print(f"SETUP: {SETUP.get(slot['experiment'], '')}")
-    print(f"\n--- Slot {index}/{total}: {slot['factor']} = {slot['setting']}, trial {slot['trial_num']} ---")
+def ask(prompt: str) -> str:
+    """Read the operator's answer; `q` ends the session from any prompt."""
+    answer = input(prompt).strip()
+    if answer.lower() == "q":
+        raise QuitSession
+    return answer
 
 
-def run_tx(slots: list[dict], device: int | str | None, start: int) -> None:
+def announced(selected: list[tuple[int, dict]], total: int):
+    """Yield each slot after printing its header (and the setup reminder when the experiment changes)."""
+    current_experiment = None
+    for number, slot in selected:
+        if slot["experiment"] != current_experiment:
+            current_experiment = slot["experiment"]
+            print(f"\n######## {current_experiment} (leader: {slot['leader']}) ########")
+            print(f"SETUP: {SETUP.get(current_experiment, '')}")
+        print(f"\n--- Slot {number}/{total}: {slot['factor']} = {slot['setting']}, trial {slot['trial_num']} ---")
+        yield slot
+
+
+def run_tx(selected: list[tuple[int, dict]], total: int, device: int | str | None) -> None:
     """Laptop A: play the transmission of each slot when the receiver says GO."""
-    last = None
-    for i, slot in enumerate(slots, 1):
-        if i < start:
-            continue
-        announce(i, len(slots), slot, last)
-        last = slot["experiment"]
+    for slot in announced(selected, total):
         wav = (RECORDED_DIR / slot["tx_meta"]).with_suffix(".wav")
-        fs, signal = load_wav(wav)
-        while True:
-            key = input(f"[Enter] play {wav.name} when Laptop B shows PLAY NOW, [s] skip, [q] quit: ").strip().lower()
-            if key == "q":
-                return
-            if key == "s":
-                break
-            play_audio(signal, fs, device)
+        sample_rate, signal = load_wav(wav)
+        while ask(f"[Enter] play {wav.name} when Laptop B shows PLAY NOW, [s] skip, [q] quit: ").lower() != "s":
+            play_audio(signal, sample_rate, device)
             if input("Played. [Enter] next slot, [r] replay this slot: ").strip().lower() != "r":
                 break
 
 
-def run_rx(slots: list[dict], device: int | str | None, sample_rate: int, redo: bool, start: int) -> None:
-    """Laptop B: record each slot, decode it immediately, and log it in the manifest."""
+def run_rx(selected: list[tuple[int, dict]], total: int, device: int | str | None, sample_rate: int) -> None:
+    """Laptop B: record each slot until the operator keeps a take, and log it in the manifest."""
     manifest = load_manifest()
-    done = {e["rx_wav"] for e in manifest}
-    last = None
-    for i, slot in enumerate(slots, 1):
-        if i < start or (slot["rx_wav"] in done and not redo):
-            continue  # already recorded: rerun with --redo to record it again
-        announce(i, len(slots), slot, last)
-        last = slot["experiment"]
-        meta = load_metadata(RECORDED_DIR / slot["tx_meta"])
-        cfg = meta.config
-        duration = cfg.lead_silence + len(meta.bits) * cfg.bit_duration + cfg.trail_silence + EXTRA_RECORD_SECONDS
-
-        while True:
-            key = input("[Enter] start recording, [s] skip, [q] quit: ").strip().lower()
-            if key == "q":
-                return
-            if key == "s":
-                break
-            for sec in range(COUNTDOWN_SECONDS, 0, -1):
-                print(f"  recording in {sec}...", flush=True)
-                time.sleep(1.0)
-            print(f"  >>> PLAY NOW <<<   (recording {duration:.1f} s)", flush=True)
-            audio = record_audio(duration, sample_rate, device)
-
-            out = RECORDED_DIR / slot["rx_wav"]
-            save_wav(out, audio, sample_rate)
-            result = decode_signal(audio, sample_rate, len(meta.bits), cfg, expected_bits=meta.bits)
-            print(f"  saved {out.relative_to(PROJECT_ROOT)} | peak {abs(audio).max():.2f} | "
-                  f"start {result.start_time:.3f} s | errors {result.bit_errors}/{len(meta.bits)} | "
-                  f"BER {result.ber:.1%} | margin {result.mean_margin_db:.1f} dB")
-            if abs(audio).max() < 0.01:
-                print("  WARNING: almost silent. Was the transmission played? Check volume and microphone.")
-            elif abs(audio).max() > 0.99:
-                print("  WARNING: the recording clipped. Lower Laptop A's volume or the mic input level.")
-
-            answer = input("  [Enter] keep, [d] discard (operator error only!), or type a note to keep with it: ").strip()
-            if answer.lower() == "d":
-                stamp = datetime.now().strftime("%H%M%S")
-                out.rename(out.with_name(f"{out.stem}_discarded_{stamp}.wav"))
+    for slot in announced(selected, total):
+        while ask("[Enter] start recording, [s] skip, [q] quit: ").lower() != "s":
+            recording = record_trial(slot, device, sample_rate)
+            note = input("  [Enter] keep, [d] discard (operator error only!), or type a note to keep with it: ").strip()
+            if note.lower() == "d":
+                recording.rename(recording.with_name(f"{recording.stem}_discarded_{datetime.now():%H%M%S}.wav"))
                 print("  discarded; record this slot again.")
                 continue
-            manifest = upsert_manifest(manifest, {**slot, "notes": answer})
-            MANIFEST.write_text(json.dumps(manifest, indent=2), encoding="utf-8")  # saved after every trial
+            manifest = upsert_manifest(manifest, {**slot, "notes": note})
+            save_manifest(manifest)  # after every trial, so quitting loses nothing
             break
-    print(f"\nManifest: {MANIFEST.relative_to(PROJECT_ROOT)} ({len(manifest)} trials). "
-          "Next: ./lab.sh analyze  (or python scripts/run_experiment_analysis.py --manifest data/recorded/manifest.json)")
+
+
+def record_trial(slot: dict, device: int | str | None, sample_rate: int) -> Path:
+    """Count down, record, save, decode at once, and print the result with any warnings."""
+    meta = load_metadata(RECORDED_DIR / slot["tx_meta"])
+    duration = recording_seconds(meta)
+    for second in range(COUNTDOWN_SECONDS, 0, -1):
+        print(f"  recording in {second}...", flush=True)
+        time.sleep(1.0)
+    print(f"  >>> PLAY NOW <<<   (recording {duration:.1f} s)", flush=True)
+    audio = record_audio(duration, sample_rate, device)
+
+    path = save_wav(RECORDED_DIR / slot["rx_wav"], audio, sample_rate)
+    result = decode_transmission(audio, sample_rate, meta)
+    print(f"  saved {path.relative_to(PROJECT_ROOT)} | peak {np.max(np.abs(audio)):.2f} | {result.summary()}")
+    for warning in recording_warnings(np.max(np.abs(audio)), result.mean_margin_db):
+        print(f"  WARNING: {warning}")
+    return path
+
+
+def recording_seconds(meta: TransmissionMetadata) -> float:
+    """Length of the transmission plus `EXTRA_RECORD_SECONDS` for the operators' reaction time."""
+    cfg = meta.config
+    return cfg.lead_silence + len(meta.bits) * cfg.bit_duration + cfg.trail_silence + EXTRA_RECORD_SECONDS
+
+
+def recording_warnings(peak: float, mean_margin_db: float) -> list[str]:
+    """Problems with the take itself (as opposed to a genuinely hard setting)."""
+    if peak < 0.01:
+        return ["almost silent. Was the transmission played? Check volume and the input device (./lab.sh devices)."]
+    warnings = []
+    if peak > 0.99:
+        warnings.append("the recording clipped. Lower Laptop A's volume or the mic input level.")
+    if mean_margin_db < MIN_CONFIDENT_MARGIN_DB:
+        warnings.append("the tones are barely above the background. If the transmission was clearly audible, "
+                        "check Laptop B's Mic Mode (Voice Isolation removes steady tones) and its input device.")
+    return warnings
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -153,13 +175,21 @@ def main(argv: list[str] | None = None) -> int:
     if not slots:
         parser.error(f"No slots for experiment {args.experiment!r}; see {TEMPLATE.name}.")
     device = int(args.device) if args.device and args.device.isdigit() else args.device
+    already_recorded = set() if args.role == "tx" or args.redo else {e["rx_wav"] for e in load_manifest()}
+    selected = select_slots(slots, args.start, already_recorded)
 
-    print(f"Role: {'Laptop A — TRANSMITTER (speaker)' if args.role == 'tx' else 'Laptop B — RECEIVER (microphone)'}"
-          f" | {len(slots)} slots")
-    if args.role == "tx":
-        run_tx(slots, device, args.start)
-    else:
-        run_rx(slots, device, args.sample_rate, args.redo, args.start)
+    is_tx = args.role == "tx"
+    print(f"Role: {'Laptop A — TRANSMITTER (speaker)' if is_tx else 'Laptop B — RECEIVER (microphone)'}"
+          f" | {len(selected)} of {len(slots)} slots to do")
+    try:
+        if is_tx:
+            run_tx(selected, len(slots), device)
+        else:
+            run_rx(selected, len(slots), device, args.sample_rate)
+    except QuitSession:
+        print("Session stopped.")
+    if not is_tx:
+        print(f"\nManifest: {MANIFEST.relative_to(PROJECT_ROOT)}. Next: ./lab.sh analyze")
     return 0
 
 

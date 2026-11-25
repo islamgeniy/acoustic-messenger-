@@ -102,3 +102,27 @@ Slide-based wording for comments and docstrings is deferred until the lecture PD
 - On a perfectly clean (synthetic) signal the margin is huge (~120 dB) because the losing tone is ≈ 0. Real recordings sit far lower.
 - `sys.path` boilerplate in scripts (item 18) is still there.
 - Comments and docstrings still need aligning with the lecture slides (next phase).
+
+---
+
+## 4. Clean Code pass (skill: `martin-clean-code`)
+
+Refactoring only: behaviour is unchanged (sync benchmark identical, the first real trial decodes identically, 33/33 tests).
+
+| Rule | Before | After |
+|---|---|---|
+| **F3 no flag arguments** | `allow_short` in `validate_bits` / `modulate_fsk` / `encode_to_wav`; `redo` in `run_rx` | `min_bits: int`; slot selection moved to `main` (`select_slots`) |
+| **Do one thing / G6 one level of abstraction** | `run_rx` 48 lines (prompts + recording + decoding + files + log); `decode_recording.main` 50; `detect_start` 31; `evaluate_manifest` and `plot_dft_vs_fft` mixed computing, printing and plotting | Stepdown: `record_trial`, `recording_warnings`, `resolve_parameters`, `print_bit_table`, `print_report`, `plot_experiment`, `best_and_most_difficult`, `validation_runs`, `print_validation_table`, `sliding_rms`, `coarse_onset`, `refine_onset`, `measure_bit` |
+| **SRP** | `rx.py` held both start detection (optional heuristic) and demodulation | `src/sync.py` (detect start) and `src/rx.py` (demodulate) |
+| **G5 duplication** | "load meta → decode against its bits" ×4; `_save` + `matplotlib.use` ×2; result printing ×3; CLI subprocess boilerplate ×3 tests; `q`-to-quit handling ×2 | `rx.decode_transmission` (replaces `decode_wav`); `plotting.save_figure`; `DecodeResult.summary()`; `run_script` fixture in `tests/conftest.py`; `ask()` + `QuitSession` |
+| **N naming** | `spb`, `arr`, `s0/s1`, `x` | `samples_per_bit`, `samples`, `first/last`, `tones` |
+| **Error handling** | `detect_start` silently returned `0.0` for a too-short recording | raises `ValueError` with context |
+| **Tests (F.I.R.S.T.)** | — | new pure-function tests: `select_slots`, `recording_warnings` |
+
+Functions longer than 40 lines: 4 → 1. Flag arguments: 4 → 0.
+
+Deliberately kept:
+- `decode_signal` (46 lines, 6 parameters) and `encode_to_wav` (6 parameters) are the core public APIs. Their parameters are the physical inputs of the problem, and splitting them further would hide the signal path the students must explain.
+- The 3-line `sys.path` setup in each script (making the project an installable package is a bigger change than it is worth for a course project).
+
+**Found while doing this:** the first real recording (`exp1_tb100ms_t1.wav`) contains speech and clicks but **no FSK tones** (15/32 errors, margin 5.7 dB): most likely Laptop B's Mic Mode was *Voice Isolation*, which removes steady tones. `lab_session` now warns when the mean margin is below 10 dB.

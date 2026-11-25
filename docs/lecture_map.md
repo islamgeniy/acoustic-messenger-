@@ -11,11 +11,11 @@ Equation numbers `(3-x)` are from Lyons, *Understanding Digital Signal Processin
 | Lecture (deck) | Concept | Where in code | Proof / evidence |
 |---|---|---|---|
 | SaS-w1-1 §1.1 | Sampling: x[n] = x(nT_s), n is dimensionless | `audio_io.load_wav` / `save_wav` (48 kHz) | every WAV in `data/` |
-| SaS-w1-1 §1.1.2 | Average power (1/N)Σ\|x[n]\|² | `rx.detect_start`: sliding RMS = √(average power) | `test_*auto_sync*` |
+| SaS-w1-1 §1.1.2 | Average power (1/N)Σ\|x[n]\|² | `sync.sliding_rms` (used by `sync.detect_start`): √(average power) | `test_*auto_sync*` |
 | SaS-w1-2 §1.3.2 | Discrete-time sinusoid A·sin(ω0·n), ω0 = 2πf/fs | `tx.modulate_fsk` | `test_slide4_example_1011_*` |
 | SaS-w2-1 §1.3.3 | e^{j(ω0+2π)n} = e^{jω0n}: only f < fs/2 is unique | `tx.validate_config` (Nyquist check) | `validate_config` raises for f ≥ fs/2 |
 | SaS-w3, SaS-w4 §2.1–2.3 | LTI system, impulse response, convolution y = x * h | The room is the channel: y(t) = (s * h)(t) + noise | `docs/qa_study_guide.md` §1, Exp 4 reverb tails on spectrograms |
-| SaS-w6 §3.9.2 | Frequency-selective (band-pass) filter | `rx.bandpass` (Butterworth ≈ ideal BPF) | Exp 3 prediction: out-of-band interference is ignored |
+| SaS-w6 §3.9.2 | Frequency-selective (band-pass) filter | `sync.bandpass` (Butterworth ≈ ideal BPF) | Exp 3 prediction: out-of-band interference is ignored |
 | SaS-w9-1 §3.5.2 | Time shift ⇒ phase shift only, \|a_k\| unchanged | `rx` decides on magnitudes only (unknown air delay) | `test_cross_sample_rate_*`, any real recording |
 | SaS-w9-1 §3.5.5 | Multiplication in time ⇔ convolution in frequency | Cutting a bit = multiplying by a window ⇒ spectrum convolved with the window's sinc ⇒ leakage | `05_window_functions.png` |
 | SaS-w9-1 "Power spectrum" | Magnitude in dB: 20·log10(c_k), 0 dB = peak | `BitDecision.margin_db`, spectrogram colour scale | `*_bit_spectra.png`, `*_spectrogram.png` |

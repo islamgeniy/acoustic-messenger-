@@ -65,10 +65,24 @@ def test_rx_session_records_decodes_and_logs(tmp_path: Path, monkeypatch) -> Non
     answers = iter(["", "", "", "door open"])  # start, keep | start, keep with a note
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
 
-    lab_session.run_rx(slots, device=None, sample_rate=48_000, redo=False, start=1)
+    lab_session.run_rx(lab_session.select_slots(slots, 1, set()), len(slots), None, 48_000)
 
     manifest = json.loads((recorded / "manifest.json").read_text())
     assert [e["rx_wav"] for e in manifest] == [s["rx_wav"] for s in slots]
     assert manifest[1]["notes"] == "door open"
     for spec in load_manifest(recorded / "manifest.json"):  # the analysis can read what the session wrote
         assert spec.rx_wav.exists()
+
+
+def test_select_slots_numbers_all_and_skips_done() -> None:
+    slots = [{"rx_wav": f"t{i}.wav"} for i in range(1, 6)]
+    selected = lab_session.select_slots(slots, start=2, already_recorded={"t3.wav"})
+    assert [number for number, _ in selected] == [2, 4, 5]  # numbering stays aligned with the other laptop
+
+
+def test_recording_warnings() -> None:
+    assert lab_session.recording_warnings(peak=0.3, mean_margin_db=40.0) == []
+    assert "silent" in lab_session.recording_warnings(peak=0.001, mean_margin_db=0.0)[0]
+    assert "clipped" in lab_session.recording_warnings(peak=1.0, mean_margin_db=40.0)[0]
+    # The first real trial: speech but no tones (Voice Isolation) -> mean margin 5.7 dB
+    assert "Mic Mode" in lab_session.recording_warnings(peak=0.16, mean_margin_db=5.7)[0]

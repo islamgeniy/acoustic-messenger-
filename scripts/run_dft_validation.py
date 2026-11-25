@@ -17,8 +17,6 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -27,44 +25,48 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import PLOTS_DIR
-from src.dft import dft_frequencies, direct_dft, single_sided_spectrum, validate_dft_against_fft, window
+from src.dft import DFTValidationReport, dft_frequencies, direct_dft, single_sided_spectrum, validate_dft_against_fft, window
+from src.plotting import save_figure  # also selects the non-interactive "Agg" backend
 
 
-def _save(fig: plt.Figure, path: Path) -> Path:
-    fig.tight_layout()
-    fig.savefig(path, dpi=160)
-    plt.close(fig)
-    return path
+VALIDATION_FS = 16_000
+VALIDATION_SIZES = [64, 128, 256, 512]
 
 
-def plot_dft_vs_fft(output_dir: Path) -> Path:
-    """Compare direct DFT with numpy.fft.fft on short signals and plot the residual."""
-    fs = 16_000
-    sizes = [64, 128, 256, 512]
+def validation_runs() -> list[tuple[DFTValidationReport, np.ndarray, np.ndarray]]:
+    """Direct DFT vs numpy.fft.fft on 0.8·cos(1000 Hz) + 0.5·sin(2000 Hz) for each N."""
+    runs = []
+    for n in VALIDATION_SIZES:
+        t = np.arange(n) / VALIDATION_FS
+        x = 0.8 * np.cos(2 * np.pi * 1000.0 * t) + 0.5 * np.sin(2 * np.pi * 2000.0 * t)
+        runs.append(validate_dft_against_fft(x, VALIDATION_FS))
+    return runs
 
+
+def print_validation_table(reports: list[DFTValidationReport]) -> None:
     print("=== Direct DFT vs. numpy.fft.fft Validation ===")
     print(f"{'N':>6} | {'Max |ΔX|':>12} | {'Max |ΔMag|':>12} | {'Max |ΔPhase|':>12} | {'DFT (ms)':>9} | {'FFT (ms)':>9}")
     print("-" * 74)
-    for n in sizes:
-        t = np.arange(n) / fs
-        x = 0.8 * np.cos(2 * np.pi * 1000.0 * t) + 0.5 * np.sin(2 * np.pi * 2000.0 * t)
-        report, x_direct, x_fft = validate_dft_against_fft(x, fs)
-        print(
-            f"{report.n_samples:6d} | {report.max_complex_error:12.3e} | "
-            f"{report.max_magnitude_error:12.3e} | {report.max_phase_error_rad:12.3e} | "
-            f"{report.direct_time_ms:9.3f} | {report.fft_time_ms:9.3f}"
-        )
+    for r in reports:
+        print(f"{r.n_samples:6d} | {r.max_complex_error:12.3e} | {r.max_magnitude_error:12.3e} | "
+              f"{r.max_phase_error_rad:12.3e} | {r.direct_time_ms:9.3f} | {r.fft_time_ms:9.3f}")
 
-    # Plot the largest N from the loop above
-    freqs, mag_direct, _ = single_sided_spectrum(x_direct, fs)
-    _, mag_fft, _ = single_sided_spectrum(x_fft, fs)
-    residual = np.abs(x_direct[: freqs.size] - x_fft[: freqs.size]) + 1e-18
+
+def plot_dft_vs_fft(output_dir: Path) -> Path:
+    """Validate the direct DFT against numpy.fft.fft, print the table, and plot the largest N."""
+    runs = validation_runs()
+    print_validation_table([report for report, _, _ in runs])
+    report, x_direct, x_fft = runs[-1]
+
+    freqs, mag_direct, _ = single_sided_spectrum(x_direct, VALIDATION_FS)
+    _, mag_fft, _ = single_sided_spectrum(x_fft, VALIDATION_FS)
+    residual = np.abs(x_direct[: freqs.size] - x_fft[: freqs.size]) + 1e-18  # +tiny: log axis
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6), sharex=True)
     ax1.plot(freqs, mag_fft, label="numpy.fft.fft (O(N log N))", linewidth=2.2, color="#1f77b4")
     ax1.plot(freqs, mag_direct, "--", label="Direct DFT (O(N²))", linewidth=1.5, color="#d62728")
     ax1.set_ylabel("Normalized Magnitude")
-    ax1.set_title(f"Direct DFT vs. Library FFT Validation (N = {sizes[-1]}, fs = {fs} Hz)")
+    ax1.set_title(f"Direct DFT vs. Library FFT Validation (N = {report.n_samples}, fs = {VALIDATION_FS} Hz)")
     ax1.legend()
     ax1.grid(True, alpha=0.3)
 
@@ -73,7 +75,7 @@ def plot_dft_vs_fft(output_dir: Path) -> Path:
     ax2.set_ylabel("Absolute Error |X_dft - X_fft|")
     ax2.set_title(f"Complex Spectral Residual (max error = {report.max_complex_error:.2e})")
     ax2.grid(True, which="both", alpha=0.3)
-    return _save(fig, output_dir / "01_dft_vs_fft_validation.png")
+    return save_figure(fig, output_dir / "01_dft_vs_fft_validation.png")
 
 
 def plot_bins_magnitude_phase(output_dir: Path) -> Path:
@@ -110,7 +112,7 @@ def plot_bins_magnitude_phase(output_dir: Path) -> Path:
         ax.set_xlabel("Analysis frequency f(m) = m·fs/N (kHz)")
     fig.suptitle("Lecture DFT Example 1 (N = 8, fs = 8 kHz): sin(2π·1000t) + 0.5·sin(2π·2000t + 3π/4)\n"
                  "bins m = 5…7 mirror m = 3…1 (real input: |X(N-m)| = |X(m)|)")
-    return _save(fig, output_dir / "02_bins_magnitude_phase.png")
+    return save_figure(fig, output_dir / "02_bins_magnitude_phase.png")
 
 
 def plot_spectral_leakage(output_dir: Path) -> Path:
@@ -150,7 +152,7 @@ def plot_spectral_leakage(output_dir: Path) -> Path:
         ax.set_ylabel("DFT output magnitude |X(m)|")
         ax.legend(fontsize=8.5)
         ax.grid(True, alpha=0.3)
-    return _save(fig, output_dir / "03_spectral_leakage.png")
+    return save_figure(fig, output_dir / "03_spectral_leakage.png")
 
 
 def plot_duration_vs_resolution(output_dir: Path) -> Path:
@@ -184,7 +186,7 @@ def plot_duration_vs_resolution(output_dir: Path) -> Path:
 
     axes[0].set_ylabel("Normalized Magnitude")
     fig.suptitle("Option A Detection Trade-off: Shorter Bit Duration Widens Main Lobes (Δf = 1/Tb)", fontsize=12)
-    return _save(fig, output_dir / "04_duration_vs_resolution.png")
+    return save_figure(fig, output_dir / "04_duration_vs_resolution.png")
 
 
 def plot_window_functions(output_dir: Path) -> Path:
@@ -211,7 +213,7 @@ def plot_window_functions(output_dir: Path) -> Path:
     for ax in (ax_t, ax_f):
         ax.legend(fontsize=8.5)
         ax.grid(True, alpha=0.3)
-    return _save(fig, output_dir / "05_window_functions.png")
+    return save_figure(fig, output_dir / "05_window_functions.png")
 
 
 def main() -> int:

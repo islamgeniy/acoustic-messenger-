@@ -17,8 +17,8 @@ from src.audio_io import save_metadata, save_wav
 from src.config import MIN_REQUIRED_BITS, ModulationConfig, TransmissionMetadata
 
 
-def validate_bits(bits: str, allow_short: bool = False) -> str:
-    """Validate a bitstring and strip whitespace (e.g. "1011 0010" -> "10110010")."""
+def validate_bits(bits: str, min_bits: int = MIN_REQUIRED_BITS) -> str:
+    """Validate a bitstring of at least `min_bits` bits and strip whitespace ("1011 0010" -> "10110010")."""
     cleaned = "".join(bits.split())
     if not cleaned:
         raise ValueError("Bitstring cannot be empty.")
@@ -27,10 +27,10 @@ def validate_bits(bits: str, allow_short: bool = False) -> str:
     if invalid:
         raise ValueError(f"Bitstring must contain only '0' and '1'; found invalid chars: {sorted(invalid)}")
 
-    if not allow_short and len(cleaned) < MIN_REQUIRED_BITS:
+    if len(cleaned) < min_bits:
         raise ValueError(
-            f"Message has {len(cleaned)} bits, but Option A requires at least "
-            f"{MIN_REQUIRED_BITS} bits. Pass allow_short=True for short sanity tests."
+            f"Message has {len(cleaned)} bits but needs at least {min_bits} "
+            f"(Option A requires {MIN_REQUIRED_BITS}; pass min_bits=1 for short sanity tests)."
         )
     return cleaned
 
@@ -72,7 +72,7 @@ def text_to_bits(text: str) -> str:
 
 def bits_to_text(bits: str) -> str:
     """Convert an 8-bit-aligned bitstring back to text (inverse of `text_to_bits`)."""
-    cleaned = validate_bits(bits, allow_short=True)
+    cleaned = validate_bits(bits, min_bits=1)
     if len(cleaned) % 8 != 0:
         raise ValueError(f"Bitstring length ({len(cleaned)}) must be a multiple of 8 to decode text.")
     raw = bytes(int(cleaned[i : i + 8], 2) for i in range(0, len(cleaned), 8))
@@ -83,7 +83,7 @@ def modulate_fsk(
     bits: str,
     config: Optional[ModulationConfig] = None,
     *,
-    allow_short: bool = False,
+    min_bits: int = MIN_REQUIRED_BITS,
 ) -> np.ndarray:
     """Synthesize a mono continuous-phase 2-FSK waveform for `bits`.
 
@@ -98,7 +98,7 @@ def modulate_fsk(
     """
     cfg = config if config is not None else ModulationConfig()
     validate_config(cfg)
-    payload = validate_bits(bits, allow_short=allow_short)
+    payload = validate_bits(bits, min_bits)
 
     bit_freqs = np.array([cfg.f1 if b == "1" else cfg.f0 for b in payload])
     inst_freq = np.repeat(bit_freqs, cfg.samples_per_bit)
@@ -116,7 +116,7 @@ def encode_to_wav(
     bits: Optional[str] = None,
     text: Optional[str] = None,
     config: Optional[ModulationConfig] = None,
-    allow_short: bool = False,
+    min_bits: int = MIN_REQUIRED_BITS,
     notes: str = "",
 ) -> tuple[Path, Path, TransmissionMetadata, np.ndarray]:
     """Encode a bitstring or text message to a WAV file plus companion JSON metadata.
@@ -127,8 +127,8 @@ def encode_to_wav(
         raise ValueError("Provide exactly one of `bits` or `text`.")
 
     cfg = config if config is not None else ModulationConfig()
-    payload = validate_bits(text_to_bits(text) if text is not None else bits, allow_short=allow_short)
-    signal = modulate_fsk(payload, cfg, allow_short=allow_short)
+    payload = validate_bits(text_to_bits(text) if text is not None else bits, min_bits)
+    signal = modulate_fsk(payload, cfg, min_bits=min_bits)
 
     wav_path = save_wav(output_wav_path, signal, cfg.sample_rate)
     metadata = TransmissionMetadata(

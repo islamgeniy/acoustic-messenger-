@@ -10,7 +10,7 @@
 | :--- | :--- | :--- | :--- |
 | **Shuhratov Abdulloh** | `dft-validation` | `src/dft.py`, `scripts/run_dft_validation.py`, `tests/test_dft.py` | **Exp 1:** Bit Duration ($T_b$) |
 | **Xojambetov Islam** | `tx-encoder` | `src/tx.py`, `scripts/encode_message.py`, `tests/test_tx.py` | **Exp 2:** Tone Separation ($\Delta f$) |
-| **Mirobidov Mirakbar** | `rx-decoder` | `src/rx.py`, `scripts/decode_recording.py`, `tests/test_loopback.py` | **Exp 3:** Background Interference |
+| **Mirobidov Mirakbar** | `rx-decoder` | `src/rx.py`, `src/sync.py`, `scripts/decode_recording.py`, `tests/test_loopback.py` | **Exp 3:** Background Interference |
 | **Malikov Amirxon** | `eval-plots` | `src/plotting.py`, `src/experiments.py`, `scripts/run_experiment_analysis.py`, `tests/test_eval_plots.py` | **Exp 4:** Distance & Position (Acoustic Path) |
 
 ---
