@@ -17,8 +17,15 @@ setup() {
     echo "Creating virtual environment .venv ..."
     python3 -m venv .venv
   fi
-  "$PY" -m pip install --quiet --upgrade pip
-  "$PY" -m pip install --quiet -r requirements.txt
+  echo "Installing packages ..."
+  if "$PY" -m pip --version >/dev/null 2>&1; then
+    "$PY" -m pip install --quiet -r requirements.txt
+  elif command -v uv >/dev/null 2>&1; then
+    uv pip install --quiet --python "$PY" -r requirements.txt   # .venv made by `uv venv` has no pip
+  else
+    "$PY" -m ensurepip --upgrade >/dev/null                        # add pip to a pip-less venv
+    "$PY" -m pip install --quiet -r requirements.txt
+  fi
   echo "Running tests ..."
   "$PY" -m pytest -q
   echo "Audio devices (> = default input, < = default output):"
