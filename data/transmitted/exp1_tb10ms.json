@@ -1,0 +1,18 @@
+{
+  "bits": "10110010111001010110100110010110",
+  "config": {
+    "sample_rate": 48000,
+    "f0": 1000.0,
+    "f1": 2000.0,
+    "bit_duration": 0.01,
+    "amplitude": 0.8,
+    "lead_silence": 0.5,
+    "trail_silence": 0.5,
+    "use_preamble": false,
+    "preamble_bits": "10101010"
+  },
+  "text": null,
+  "wav_path": "exp1_tb10ms.wav",
+  "created_at": "2026-11-25T17:28:04+00:00",
+  "notes": "Exp 1 Bit Duration: Tb=10 ms"
+}
