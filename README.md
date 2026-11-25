@@ -64,8 +64,15 @@ python scripts/decode_recording.py data/recorded/baseline/live_demo.wav \
 ```
 
 ### Controlled Experiments & Labelled Plots (Slide 14)
+Full two-laptop guide: [docs/experiments.md](docs/experiments.md).
 ```bash
-# 1. Generate all experiment TX WAV/JSON files + manifest template
+# Guided sessions: same experiment on both laptops, numbered trial slots
+./lab.sh setup                                    # both laptops, once
+./lab.sh tx --experiment exp2_tone_separation     # Laptop A (speaker)
+./lab.sh rx --experiment exp2_tone_separation     # Laptop B (mic): record + decode + log each trial
+./lab.sh analyze                                  # results/trials.csv + results/plots/
+
+# 1. (Re)generate all experiment TX WAV/JSON files + manifest template
 python scripts/prepare_experiment_audio.py
 
 # 2. Decode one recording and save its diagnostic plots
@@ -98,6 +105,7 @@ When the instructor supplies a brand-new 32-bit sequence during the demo:
 
 - [docs/experiment_protocol.md](docs/experiment_protocol.md) — Pre-experiment predictions, fixed vs. varied parameters, and recording checklist for all 4 experiments.
 - [docs/contribution_and_ai_disclosure.md](docs/contribution_and_ai_disclosure.md) — Individual contribution summary and AI-use disclosure (Slides 15 & 18).
+- [docs/experiments.md](docs/experiments.md) — How to set up both laptops, record all trials, and analyse the results.
 - [docs/lecture_map.md](docs/lecture_map.md) — Which lecture concept lives where in the code, with tests and plots as evidence.
 - [docs/qa_study_guide.md](docs/qa_study_guide.md) — Complete signal path, Fourier concepts, and prediction/diagnosis prep for the 5–7 minute individual oral defense.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Branch/PR workflow and shared interface contracts.

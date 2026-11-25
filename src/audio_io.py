@@ -61,18 +61,19 @@ def load_metadata(path: str | Path) -> TransmissionMetadata:
     return TransmissionMetadata.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
-def play_audio(signal: np.ndarray, sample_rate: int) -> None:
-    """Play a mono float signal through the default speaker and wait until it finishes."""
+def play_audio(signal: np.ndarray, sample_rate: int, device: int | str | None = None) -> None:
+    """Play a mono float signal and wait until it finishes (`device`: index or name, default speaker if None)."""
     import sounddevice as sd  # imported here so the rest of the project works without audio hardware
 
-    sd.play(np.asarray(signal, dtype=np.float32), samplerate=int(sample_rate))
+    sd.play(np.asarray(signal, dtype=np.float32), samplerate=int(sample_rate), device=device)
     sd.wait()
 
 
-def record_audio(duration_sec: float, sample_rate: int) -> np.ndarray:
-    """Record mono audio from the default microphone for `duration_sec` seconds."""
+def record_audio(duration_sec: float, sample_rate: int, device: int | str | None = None) -> np.ndarray:
+    """Record mono audio for `duration_sec` seconds (`device`: index or name, default microphone if None)."""
     import sounddevice as sd
 
-    recording = sd.rec(int(round(duration_sec * sample_rate)), samplerate=int(sample_rate), channels=1, dtype="float32")
+    recording = sd.rec(int(round(duration_sec * sample_rate)), samplerate=int(sample_rate), channels=1,
+                       dtype="float32", device=device)
     sd.wait()
     return recording[:, 0].astype(np.float64)

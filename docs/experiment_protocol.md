@@ -64,21 +64,12 @@
 
 ## How to Run Real Recordings & Generate All Figures
 
-1. **Generate all TX files (already run once, safe to re-run):**
-   ```bash
-   .venv/bin/python scripts/prepare_experiment_audio.py
-   ```
-2. **Record each trial on Laptop B while playing the corresponding WAV on Laptop A:**
-   ```bash
-   # Example: Exp 4, 2.0m NLOS, Trial 1
-   .venv/bin/python scripts/record_trial.py \
-       -o data/recorded/exp4_distance_position/2p0m_nlos_t1.wav \
-       --duration 6.0 \
-       --decode-meta data/transmitted/baseline_32bit.json
-   ```
-3. **Copy `data/recorded/manifest_template.json` to `data/recorded/manifest.json`** (keep only recorded files, fill in `start_time` if manual alignment is needed for very noisy/far trials, and add brief `notes`).
-4. **Run the batch evaluation & plotting pipeline:**
-   ```bash
-   .venv/bin/python scripts/run_experiment_analysis.py --manifest data/recorded/manifest.json
-   ```
-   This updates `results/trials.csv` and generates all labelled waveforms, spectrograms, bit-decision plots, pass-vs-fail bit spectra, BER/decision-margin curves, and the per-setting tone-magnitude chart under `results/plots/`.
+Step-by-step instructions (two-laptop setup, guided recording sessions, analysis, troubleshooting) are in
+**[experiments.md](experiments.md)**. In short:
+
+```bash
+./lab.sh setup                                   # both laptops, once
+./lab.sh tx --experiment exp4_distance_position  # Laptop A (speaker)
+./lab.sh rx --experiment exp4_distance_position  # Laptop B (microphone): records, decodes, logs every trial
+./lab.sh analyze                                 # results/trials.csv + all labelled plots
+```
