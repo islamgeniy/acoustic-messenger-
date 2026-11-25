@@ -66,12 +66,12 @@ def plot_spectrogram(signal: np.ndarray, sample_rate: int, result: DecodeResult,
     nperseg = min(signal.size, max(256, int(sample_rate * min(0.04, 0.6 * cfg.bit_duration))))
     f, t, sxx = spectrogram(signal, fs=sample_rate, nperseg=nperseg, noverlap=int(0.75 * nperseg), window="hann")
     keep = f <= min(sample_rate / 2, 1.8 * max(cfg.f0, cfg.f1) + 400.0)
-    sxx_db = 10.0 * np.log10(sxx[keep] + 1e-16)
+    sxx_db = 10.0 * np.log10(sxx[keep] / sxx[keep].max() + 1e-16)  # 0 dB = strongest point (SaS-w9-1)
 
     fig, ax = plt.subplots(figsize=(11, 4.4))
     mesh = ax.pcolormesh(t, f[keep], sxx_db, shading="gouraud", cmap="viridis",
                          vmin=float(np.percentile(sxx_db, 15)), vmax=float(sxx_db.max()))
-    fig.colorbar(mesh, ax=ax, label="Power Spectral Density (dB)")
+    fig.colorbar(mesh, ax=ax, label="Power Spectral Density (dB, 0 dB = peak)")
     ax.axhline(cfg.f0, color="#ffffff", linestyle="--", linewidth=1.1, label=f"Bit '0' (f0 = {cfg.f0:.0f} Hz)")
     ax.axhline(cfg.f1, color="#ffeb3b", linestyle="--", linewidth=1.1, label=f"Bit '1' (f1 = {cfg.f1:.0f} Hz)")
     ax.set_xlabel("Time (s)")

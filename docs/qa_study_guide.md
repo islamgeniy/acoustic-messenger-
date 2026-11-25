@@ -18,7 +18,7 @@
    - Locate payload start $t_0$ via either **manual `--start-time`** or **automatic in-band energy onset** (band-pass around $f_0$/$f_1$, then the first sustained rise of short-time RMS above the background noise).
    - Slice each bit interval $[t_0 + i T_b,\; t_0 + (i+1) T_b]$ with an optional 5% edge guard margin to avoid reverb spillover at transitions.
 4. **Windowing + FFT + Non-Coherent Detection (`src/rx.py`):**
-   - Multiply each bit segment by a **Hann window** to suppress spectral leakage sidelobes.
+   - Multiply each bit segment by the lecture's **Hanning window** $w(n) = 0.5 - 0.5\cos(2\pi n/N)$ (SaS-w11-3, Lyons 3-29) to suppress spectral leakage sidelobes.
    - Compute `numpy.fft.rfft` (zero-padded for smooth peak sampling), measure peak spectral magnitude near $f_0$ and $f_1$, and decide `'1'` if $|X(f_1)| > |X(f_0)|$ else `'0'`.
    - Evaluate $\text{BER} = \frac{\text{incorrect bits}}{\text{transmitted bits}}$ and report each bit's **decision margin** $20\log_{10}(\text{stronger}/\text{weaker})$ in dB (0 dB = a coin flip).
 

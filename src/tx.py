@@ -36,7 +36,13 @@ def validate_bits(bits: str, allow_short: bool = False) -> str:
 
 
 def validate_config(config: ModulationConfig) -> None:
-    """Validate modulation parameters against Nyquist and physical constraints."""
+    """Validate modulation parameters against Nyquist and physical constraints.
+
+    Sampling turns a tone f into the discrete-time sinusoid x[n] = A sin(ω0 n) with
+    digital frequency ω0 = 2π f / fs (rad/sample). Because e^{j(ω0 + 2π)n} = e^{jω0 n}
+    (SaS-w2-1, 1.3.3), only ω0 < π, i.e. f < fs/2, gives a distinct tone; anything
+    higher would alias onto a lower frequency.
+    """
     nyquist = config.sample_rate / 2.0
     for name, freq in (("f0", config.f0), ("f1", config.f1)):
         if not (0.0 < freq < nyquist):
@@ -81,8 +87,9 @@ def modulate_fsk(
 ) -> np.ndarray:
     """Synthesize a mono continuous-phase 2-FSK waveform for `bits`.
 
-    Each bit holds frequency f0 ('0') or f1 ('1') for `samples_per_bit` samples.
-    The phase is the running sum of the instantaneous frequency,
+    Each bit holds frequency f0 ('0') or f1 ('1') for `samples_per_bit` samples,
+    i.e. a piece of the discrete-time sinusoid A sin(ω0 n), ω0 = 2π f / fs
+    (SaS-w1-2, 1.3.2). The phase is the running sum of the instantaneous frequency,
 
         phase[n] = 2*pi/fs * sum_{k<n} f[k],
 

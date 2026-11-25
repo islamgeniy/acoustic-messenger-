@@ -3,8 +3,12 @@
 Signal path for a recording:
   1. Find where the transmission starts (manual `start_time`, or `detect_start`).
   2. Cut the recording into one segment per bit interval.
-  3. Hann-window + FFT each segment and read the magnitude near f0 and near f1.
+  3. Hanning-window + FFT each segment and read the magnitude near f0 and near f1.
   4. Decide '1' if |X(f1)| > |X(f0)|, else '0' (Slide 5), then compute BER (Slide 6).
+
+Why only magnitudes? The air path delays the sound by an unknown t0, and the
+time-shifting property (SaS-w9-1, 3.5.2; Lyons 3-19) says a delay only multiplies
+the spectrum by e^{-jωt0}: the phase changes, the magnitude |X| does not.
 """
 
 from __future__ import annotations
@@ -17,10 +21,11 @@ from scipy.signal import butter, sosfiltfilt
 
 from src.audio_io import load_wav
 from src.config import BitDecision, DecodeResult, ModulationConfig
+from src.dft import window
 
 # --- Bit measurement --------------------------------------------------------
 GUARD_FRACTION = 0.05     # skip 5% at each bit edge: timing error and room echo live there
-MIN_FFT_SIZE = 4096       # zero-pad short segments so the peak is sampled finely (no new resolution)
+MIN_FFT_SIZE = 4096       # zero-pad so the peak is sampled finely (Lyons 3.11: no new resolution, less scalloping)
 PEAK_SEARCH_HZ = 40.0     # look for each tone's peak within ±40 Hz ...
 PEAK_SEARCH_MAX_SEP = 0.35  # ... but never wider than 35% of |f1 - f0|, so the two searches never overlap
 
@@ -42,7 +47,11 @@ def compute_ber(decoded_bits: str, expected_bits: str) -> tuple[int, float]:
 
 
 def bandpass(signal: np.ndarray, sample_rate: int, f0: float, f1: float) -> np.ndarray:
-    """Zero-phase Butterworth band-pass that keeps only the band containing both tones."""
+    """Frequency-selective band-pass filter (SaS-w6, 3.9.2) keeping only the band with both tones.
+
+    A 4th-order Butterworth approximates the ideal band-pass H(jω) = 1 inside
+    [ω_c1, ω_c2] and 0 outside; filtering forwards and backwards cancels its phase delay.
+    """
     low = max(50.0, min(f0, f1) - BAND_MARGIN_HZ)
     high = min(0.95 * sample_rate / 2.0, max(f0, f1) + BAND_MARGIN_HZ)
     sos = butter(4, [low, high], btype="bandpass", fs=sample_rate, output="sos")
@@ -52,7 +61,8 @@ def bandpass(signal: np.ndarray, sample_rate: int, f0: float, f1: float) -> np.n
 def detect_start(signal: np.ndarray, sample_rate: int, config: ModulationConfig) -> float:
     """Estimate the transmission start time (seconds) from in-band energy.
 
-    1. Band-pass the recording, then compute a sliding RMS over short frames.
+    1. Band-pass the recording, then compute a sliding RMS over short frames
+       (RMS = square root of the average power (1/N) Σ|x[n]|², SaS-w1-1, 1.1.2).
     2. Coarse start: first frame where the RMS stays above the threshold for
        `SUSTAIN_BITS` of a bit (threshold = louder of 5x noise or 22% of peak).
     3. Refine to the first sample, near that frame, whose amplitude reaches
@@ -90,15 +100,19 @@ def bit_segment(signal: np.ndarray, sample_rate: int, start_time: float, bit_dur
 
 
 def bit_spectrum(segment: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:
-    """Hann-windowed, zero-padded FFT magnitude of one bit segment.
+    """Hanning-windowed, zero-padded FFT magnitude of one bit segment.
 
-    Scaled so a tone of amplitude A peaks at ≈ A. Returns `(freqs, magnitudes)`.
+    X_w(m) = Σ w(n)·x(n)·e^{-j2πnm/N} (Lyons 3-26) with the lecture's Hanning
+    window w(n) = 0.5 - 0.5cos(2πn/N). A bit rarely holds a whole number of tone
+    cycles, so without a window its energy would leak into the other tone's bins
+    (SaS-w11-3, DFT leakage). Scaled by 2/Σw(n) so a tone of amplitude A peaks
+    at ≈ A. Returns `(freqs, magnitudes)` with freqs = m·fs/N_fft (Lyons 3-5).
     """
     if segment.size < 4:
         return np.zeros(1), np.zeros(1)
-    window = np.hanning(segment.size)
+    w = window("hanning", segment.size)
     n_fft = max(MIN_FFT_SIZE, 1 << int(np.ceil(np.log2(segment.size))))
-    mags = 2.0 * np.abs(np.fft.rfft(segment * window, n=n_fft)) / window.sum()
+    mags = 2.0 * np.abs(np.fft.rfft(segment * w, n=n_fft)) / w.sum()
     freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate)
     return freqs, mags
 

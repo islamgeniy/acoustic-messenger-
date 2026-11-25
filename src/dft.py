@@ -1,12 +1,14 @@
-"""Direct Discrete Fourier Transform (DFT) implementation and validation.
+"""Direct Discrete Fourier Transform (DFT), inverse DFT, and window functions.
 
-Implements the exact exponential-form DFT equation from Slide 13:
+Follows lecture SaS-w11-3 "An Intuitive Guide to the DFT" (Lyons, *Understanding DSP*, ch. 3)
+and the term-project Slide 13:
 
-    X[m] = sum_{n=0}^{N-1} x[n] * exp(-j * 2 * pi * n * m / N)
-    f_m  = m * f_s / N
+    DFT  (Lyons 3-2):   X(m) = sum_{n=0}^{N-1} x(n) e^{-j 2 pi n m / N}
+    IDFT (Lyons 3-23):  x(n) = (1/N) sum_{m=0}^{N-1} X(m) e^{+j 2 pi m n / N}
+    Bin frequency (Lyons 3-5):  f_analysis(m) = m fs / N
 
-Direct DFT runs in O(N^2) time and is validated on short signals against
-`numpy.fft.fft`. The full acoustic receiver uses library FFTs (O(N log N)).
+The direct DFT costs O(N^2) multiplications, so it is only used on short signals
+to validate `numpy.fft.fft` (O(N log N)), which the receiver then uses (Slide 13).
 """
 
 from __future__ import annotations
@@ -31,43 +33,80 @@ class DFTValidationReport:
 
 
 def dft_frequencies(n_samples: int, sample_rate: float) -> np.ndarray:
-    """Return bin center frequencies f_m = m * f_s / N for m = 0, ..., N - 1."""
+    """Analysis frequency of every bin: f_analysis(m) = m fs / N, m = 0 ... N-1 (Lyons 3-5).
+
+    Example (lecture): fs = 8000 Hz, N = 8 -> bins every 1000 Hz.
+    """
     if n_samples <= 0:
         raise ValueError(f"n_samples must be positive, got {n_samples}")
     if sample_rate <= 0:
         raise ValueError(f"sample_rate must be positive, got {sample_rate}")
-    m = np.arange(n_samples, dtype=np.float64)
-    return m * (float(sample_rate) / float(n_samples))
+    return np.arange(n_samples) * (float(sample_rate) / n_samples)
 
 
 def direct_dft(x: np.ndarray) -> np.ndarray:
-    """Compute the 1-D DFT directly from the exponential summation formula.
+    """X(m) = sum_{n=0}^{N-1} x(n) e^{-j 2 pi n m / N}, computed term by term (Lyons 3-2).
 
-    X[m] = sum_{n=0}^{N-1} x[n] * exp(-j * 2 * pi * n * m / N)
+    Each X(m) correlates x(n) with a complex sinusoid of exactly m cycles per N samples.
     """
     arr = np.asarray(x, dtype=np.complex128)
     if arr.ndim != 1:
         raise ValueError(f"Expected 1-D input array, got shape {arr.shape}")
     n_samples = arr.size
-    if n_samples == 0:
-        return np.array([], dtype=np.complex128)
-
-    n = np.arange(n_samples, dtype=np.float64)
+    n = np.arange(n_samples)
     spectrum = np.empty(n_samples, dtype=np.complex128)
     for m in range(n_samples):
-        twiddle = np.exp(-1j * 2.0 * np.pi * m * n / n_samples)
-        spectrum[m] = np.sum(arr * twiddle)
+        spectrum[m] = np.sum(arr * np.exp(-2j * np.pi * n * m / n_samples))
     return spectrum
+
+
+def direct_idft(X: np.ndarray) -> np.ndarray:
+    """x(n) = (1/N) sum_{m=0}^{N-1} X(m) e^{+j 2 pi m n / N}, computed term by term (Lyons 3-23)."""
+    spec = np.asarray(X, dtype=np.complex128)
+    if spec.ndim != 1:
+        raise ValueError(f"Expected 1-D input spectrum, got shape {spec.shape}")
+    n_samples = spec.size
+    m = np.arange(n_samples)
+    signal = np.empty(n_samples, dtype=np.complex128)
+    for n in range(n_samples):
+        signal[n] = np.sum(spec * np.exp(2j * np.pi * m * n / n_samples)) / n_samples
+    return signal
+
+
+def window(name: str, n_samples: int) -> np.ndarray:
+    """Window coefficients w(n), n = 0 ... N-1, exactly as defined in the lecture (Lyons 3-27 ... 3-30).
+
+    rectangular: w(n) = 1                                  (what a plain DFT uses implicitly)
+    triangular:  w(n) = n/(N/2) up to N/2, then 2 - n/(N/2)
+    hanning:     w(n) = 0.5 - 0.5 cos(2 pi n / N)          (also called Hann / raised cosine)
+    hamming:     w(n) = 0.54 - 0.46 cos(2 pi n / N)
+
+    Tapering both ends of the interval toward zero lowers the sinc sidelobes, so less
+    energy leaks into far-away bins, at the cost of a wider main lobe.
+    """
+    n = np.arange(n_samples)
+    half = n_samples / 2.0
+    formulas = {
+        "rectangular": lambda: np.ones(n_samples),
+        "triangular": lambda: np.where(n <= half, n / half, 2.0 - n / half),
+        "hanning": lambda: 0.5 - 0.5 * np.cos(2.0 * np.pi * n / n_samples),
+        "hamming": lambda: 0.54 - 0.46 * np.cos(2.0 * np.pi * n / n_samples),
+    }
+    if name not in formulas:
+        raise ValueError(f"Unknown window {name!r}; choose from {sorted(formulas)}")
+    return formulas[name]()
 
 
 def single_sided_spectrum(
     spectrum: np.ndarray,
     sample_rate: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Extract positive-frequency bins, normalized amplitude, and phase (rad).
+    """Positive-frequency bins with amplitude and phase (radians).
 
-    Normalizes amplitude so a pure sinusoid of amplitude A produces a peak of
-    height A at its exact bin frequency.
+    A real sinusoid of amplitude A that completes a whole number of cycles in N
+    samples gives |X(m)| = A N / 2 (Lyons 3-17), so dividing by N/2 shows the
+    peak at height A. (DC and the fs/2 bin are divided by N, since they have no
+    mirror-image bin.)
     """
     n_samples = spectrum.size
     half = n_samples // 2 + 1
@@ -80,9 +119,7 @@ def single_sided_spectrum(
             mag[1:-1] *= 2.0
         else:
             mag[1:] *= 2.0
-
-    phase = np.angle(pos)
-    return freqs, mag, phase
+    return freqs, mag, np.angle(pos)
 
 
 def validate_dft_against_fft(
@@ -104,7 +141,7 @@ def validate_dft_against_fft(
     max_complex_err = float(np.max(np.abs(x_direct - x_fft)))
     max_mag_err = float(np.max(np.abs(np.abs(x_direct) - np.abs(x_fft))))
 
-    # Only compare phase where spectral magnitude is non-negligible
+    # Phase is meaningless where the magnitude is ~0, so only compare significant bins
     significant = np.abs(x_fft) > (phase_mag_threshold * np.max(np.abs(x_fft)))
     if np.any(significant):
         phase_diff = np.angle(np.exp(1j * (np.angle(x_direct[significant]) - np.angle(x_fft[significant]))))

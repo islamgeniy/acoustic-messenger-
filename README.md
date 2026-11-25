@@ -33,7 +33,7 @@ pytest -v
 ### Direct DFT Validation & Fourier Plots (Slide 13)
 ```bash
 python scripts/run_dft_validation.py
-# Outputs 4 labelled figures in results/plots/dft/
+# Outputs 5 labelled figures in results/plots/dft/ (incl. the lecture's DFT, leakage and window examples)
 ```
 
 ### Transmit a Message (Laptop A)
@@ -98,5 +98,6 @@ When the instructor supplies a brand-new 32-bit sequence during the demo:
 
 - [docs/experiment_protocol.md](docs/experiment_protocol.md) — Pre-experiment predictions, fixed vs. varied parameters, and recording checklist for all 4 experiments.
 - [docs/contribution_and_ai_disclosure.md](docs/contribution_and_ai_disclosure.md) — Individual contribution summary and AI-use disclosure (Slides 15 & 18).
+- [docs/lecture_map.md](docs/lecture_map.md) — Which lecture concept lives where in the code, with tests and plots as evidence.
 - [docs/qa_study_guide.md](docs/qa_study_guide.md) — Complete signal path, Fourier concepts, and prediction/diagnosis prep for the 5–7 minute individual oral defense.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Branch/PR workflow and shared interface contracts.

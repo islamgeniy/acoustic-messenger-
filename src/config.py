@@ -98,7 +98,10 @@ class BitDecision:
 
     @property
     def margin_db(self) -> float:
-        """How much stronger the winning tone is than the other one, in dB (0 dB = coin flip)."""
+        """How much stronger the winning tone is than the other one, in dB (0 dB = coin flip).
+
+        Uses the lecture's magnitude-to-dB rule 20·log10(c) (SaS-w9-1, "The power spectrum").
+        """
         strong, weak = max(self.mag_f0, self.mag_f1), min(self.mag_f0, self.mag_f1)
         return float(20.0 * np.log10((strong + 1e-12) / (weak + 1e-12)))
 
