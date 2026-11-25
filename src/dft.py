@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import time
-from typing import Tuple
 
 import numpy as np
 
@@ -61,41 +60,10 @@ def direct_dft(x: np.ndarray) -> np.ndarray:
     return spectrum
 
 
-def direct_dft_matrix(x: np.ndarray) -> np.ndarray:
-    """Compute the 1-D DFT via explicit Vandermonde DFT matrix multiplication."""
-    arr = np.asarray(x, dtype=np.complex128)
-    if arr.ndim != 1:
-        raise ValueError(f"Expected 1-D input array, got shape {arr.shape}")
-    n_samples = arr.size
-    if n_samples == 0:
-        return np.array([], dtype=np.complex128)
-
-    idx = np.arange(n_samples, dtype=np.float64)
-    w = np.exp(-1j * 2.0 * np.pi * np.outer(idx, idx) / n_samples)
-    return w @ arr
-
-
-def direct_idft(X: np.ndarray) -> np.ndarray:
-    """Compute the 1-D inverse DFT directly from its exponential sum."""
-    spec = np.asarray(X, dtype=np.complex128)
-    if spec.ndim != 1:
-        raise ValueError(f"Expected 1-D input spectrum, got shape {spec.shape}")
-    n_samples = spec.size
-    if n_samples == 0:
-        return np.array([], dtype=np.complex128)
-
-    m = np.arange(n_samples, dtype=np.float64)
-    signal = np.empty(n_samples, dtype=np.complex128)
-    for n in range(n_samples):
-        twiddle = np.exp(1j * 2.0 * np.pi * m * n / n_samples)
-        signal[n] = np.sum(spec * twiddle) / n_samples
-    return signal
-
-
 def single_sided_spectrum(
     spectrum: np.ndarray,
     sample_rate: float,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Extract positive-frequency bins, normalized amplitude, and phase (rad).
 
     Normalizes amplitude so a pure sinusoid of amplitude A produces a peak of
@@ -121,7 +89,7 @@ def validate_dft_against_fft(
     x: np.ndarray,
     sample_rate: int,
     phase_mag_threshold: float = 1e-6,
-) -> Tuple[DFTValidationReport, np.ndarray, np.ndarray]:
+) -> tuple[DFTValidationReport, np.ndarray, np.ndarray]:
     """Compare `direct_dft(x)` against `numpy.fft.fft(x)` and time both."""
     arr = np.asarray(x, dtype=np.float64)
 

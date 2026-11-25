@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Generate all transmitted WAV/JSON files and a manifest template for the 4 controlled experiments."""
+"""Generate every transmitted WAV/JSON pair and a manifest template for the controlled experiments.
+
+Each experiment varies one factor (Slide 14). Exp 1 and Exp 2 need their own
+transmissions; Exp 3 and Exp 4 replay the baseline and change the room instead.
+"""
 
 from __future__ import annotations
 
@@ -14,134 +18,76 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.config import DEFAULT_TEST_BITS, RECORDED_DIR, TRANSMITTED_DIR, ModulationConfig
 from src.tx import encode_to_wav
 
+TRIALS_PER_SETTING = 3
+BASELINE = "baseline_32bit"
+
+# TX file stem -> (ModulationConfig overrides, notes saved in its JSON)
+TRANSMISSIONS = {
+    BASELINE: ({}, "Baseline 32-bit 2-FSK transmission (f0=1000 Hz, f1=2000 Hz, Tb=0.10 s)"),
+    "exp1_tb100ms": ({"bit_duration": 0.10}, "Exp 1 Bit Duration: Tb=100 ms"),
+    "exp1_tb50ms": ({"bit_duration": 0.05}, "Exp 1 Bit Duration: Tb=50 ms"),
+    "exp1_tb20ms": ({"bit_duration": 0.02}, "Exp 1 Bit Duration: Tb=20 ms"),
+    "exp1_tb10ms": ({"bit_duration": 0.01}, "Exp 1 Bit Duration: Tb=10 ms"),
+    "exp2_df1000": ({"f1": 2000.0}, "Exp 2 Tone Separation: f0=1000 Hz, f1=2000 Hz (Δf=1000 Hz)"),
+    "exp2_df200": ({"f1": 1200.0}, "Exp 2 Tone Separation: f0=1000 Hz, f1=1200 Hz (Δf=200 Hz)"),
+    "exp2_df50": ({"f1": 1050.0}, "Exp 2 Tone Separation: f0=1000 Hz, f1=1050 Hz (Δf=50 Hz)"),
+    "exp2_df10": ({"f1": 1010.0}, "Exp 2 Tone Separation: f0=1000 Hz, f1=1010 Hz (Δf=10 Hz)"),
+}
+
+# (experiment folder, leader, factor, [(setting label, TX stem, recording file stem), ...])
+EXPERIMENTS = [
+    ("exp1_bit_duration", "Shuhratov Abdulloh", "Bit Duration (Tb)", [
+        ("100 ms", "exp1_tb100ms", "exp1_tb100ms"),
+        ("50 ms", "exp1_tb50ms", "exp1_tb50ms"),
+        ("20 ms", "exp1_tb20ms", "exp1_tb20ms"),
+        ("10 ms", "exp1_tb10ms", "exp1_tb10ms"),
+    ]),
+    ("exp2_tone_separation", "Xojambetov Islam", "Tone Separation (Δf)", [
+        ("1000 Hz", "exp2_df1000", "exp2_df1000"),
+        ("200 Hz", "exp2_df200", "exp2_df200"),
+        ("50 Hz", "exp2_df50", "exp2_df50"),
+        ("10 Hz", "exp2_df10", "exp2_df10"),
+    ]),
+    ("exp3_background_interference", "Mirobidov Mirakbar", "Background Interference", [
+        ("Quiet baseline", BASELINE, "quiet"),
+        ("Out-of-band speech/music", BASELINE, "oob_noise"),
+        ("In-band tone/music (~1-2 kHz)", BASELINE, "inband_noise"),
+    ]),
+    ("exp4_distance_position", "Malikov Amirxon", "Distance & Position", [
+        ("0.5m LOS", BASELINE, "0p5m_los"),
+        ("2.0m LOS", BASELINE, "2p0m_los"),
+        ("5.0m LOS", BASELINE, "5p0m_los"),
+        ("2.0m NLOS (blocked)", BASELINE, "2p0m_nlos"),
+    ]),
+]
+
 
 def main() -> int:
-    generated: list[Path] = []
+    for stem, (overrides, notes) in TRANSMISSIONS.items():
+        encode_to_wav(TRANSMITTED_DIR / f"{stem}.wav", bits=DEFAULT_TEST_BITS,
+                      config=ModulationConfig(**overrides), notes=notes)
 
-    # Baseline TX (used for Baseline, Exp 3 Background Interference, and Exp 4 Distance & Position)
-    wav, meta, _, _ = encode_to_wav(
-        TRANSMITTED_DIR / "baseline_32bit.wav",
-        bits=DEFAULT_TEST_BITS,
-        config=ModulationConfig(f0=1000.0, f1=2000.0, bit_duration=0.10),
-        notes="Baseline 32-bit 2-FSK transmission (f0=1000 Hz, f1=2000 Hz, Tb=0.10 s)",
-    )
-    generated.append(wav)
-
-    # Exp 1: Bit Duration (Shuhratov Abdulloh)
-    exp1_settings = [
-        ("100 ms", 0.10, "exp1_tb100ms"),
-        ("50 ms", 0.05, "exp1_tb50ms"),
-        ("20 ms", 0.02, "exp1_tb20ms"),
-        ("10 ms", 0.01, "exp1_tb10ms"),
+    manifest = [
+        {
+            "experiment": experiment,
+            "leader": leader,
+            "factor": factor,
+            "setting": setting,
+            "trial_num": trial,
+            "tx_meta": f"../transmitted/{tx_stem}.json",
+            "rx_wav": f"{experiment}/{rx_stem}_t{trial}.wav",
+            "start_time": None,
+            "notes": "",
+        }
+        for experiment, leader, factor, settings in EXPERIMENTS
+        for setting, tx_stem, rx_stem in settings
+        for trial in range(1, TRIALS_PER_SETTING + 1)
     ]
-    for label, tb, stem in exp1_settings:
-        w, _, _, _ = encode_to_wav(
-            TRANSMITTED_DIR / f"{stem}.wav",
-            bits=DEFAULT_TEST_BITS,
-            config=ModulationConfig(f0=1000.0, f1=2000.0, bit_duration=tb),
-            notes=f"Exp 1 Bit Duration: Tb={label}",
-        )
-        generated.append(w)
-
-    # Exp 2: Tone Separation (Xojambetov Islam)
-    exp2_settings = [
-        ("1000 Hz", 2000.0, "exp2_df1000"),
-        ("200 Hz", 1200.0, "exp2_df200"),
-        ("50 Hz", 1050.0, "exp2_df50"),
-        ("10 Hz", 1010.0, "exp2_df10"),
-    ]
-    for label, f1, stem in exp2_settings:
-        w, _, _, _ = encode_to_wav(
-            TRANSMITTED_DIR / f"{stem}.wav",
-            bits=DEFAULT_TEST_BITS,
-            config=ModulationConfig(f0=1000.0, f1=f1, bit_duration=0.10),
-            notes=f"Exp 2 Tone Separation: f0=1000 Hz, f1={f1:.0f} Hz (Δf={label})",
-        )
-        generated.append(w)
-
-    # Build ready-to-use manifest template pointing to real recording paths
-    manifest_entries: list[dict] = []
-
-    for label, _, stem in exp1_settings:
-        for t in range(1, 4):
-            manifest_entries.append(
-                {
-                    "experiment": "exp1_bit_duration",
-                    "leader": "Shuhratov Abdulloh",
-                    "factor": "Bit Duration (Tb)",
-                    "setting": label,
-                    "trial_num": t,
-                    "tx_meta": f"../transmitted/{stem}.json",
-                    "rx_wav": f"exp1_bit_duration/{stem}_t{t}.wav",
-                    "start_time": None,
-                    "notes": "",
-                }
-            )
-
-    for label, _, stem in exp2_settings:
-        for t in range(1, 4):
-            manifest_entries.append(
-                {
-                    "experiment": "exp2_tone_separation",
-                    "leader": "Xojambetov Islam",
-                    "factor": "Tone Separation (Δf)",
-                    "setting": label,
-                    "trial_num": t,
-                    "tx_meta": f"../transmitted/{stem}.json",
-                    "rx_wav": f"exp2_tone_separation/{stem}_t{t}.wav",
-                    "start_time": None,
-                    "notes": "",
-                }
-            )
-
-    exp3_settings = [
-        ("Quiet baseline", "quiet"),
-        ("Out-of-band speech/music", "oob_noise"),
-        ("In-band tone/music (~1-2 kHz)", "inband_noise"),
-    ]
-    for label, slug in exp3_settings:
-        for t in range(1, 4):
-            manifest_entries.append(
-                {
-                    "experiment": "exp3_background_interference",
-                    "leader": "Mirobidov Mirakbar",
-                    "factor": "Background Interference",
-                    "setting": label,
-                    "trial_num": t,
-                    "tx_meta": "../transmitted/baseline_32bit.json",
-                    "rx_wav": f"exp3_background_interference/{slug}_t{t}.wav",
-                    "start_time": None,
-                    "notes": "",
-                }
-            )
-
-    exp4_settings = [
-        ("0.5m LOS", "0p5m_los"),
-        ("2.0m LOS", "2p0m_los"),
-        ("5.0m LOS", "5p0m_los"),
-        ("2.0m NLOS (blocked)", "2p0m_nlos"),
-    ]
-    for label, slug in exp4_settings:
-        for t in range(1, 4):
-            manifest_entries.append(
-                {
-                    "experiment": "exp4_distance_position",
-                    "leader": "Malikov Amirxon",
-                    "factor": "Distance & Position",
-                    "setting": label,
-                    "trial_num": t,
-                    "tx_meta": "../transmitted/baseline_32bit.json",
-                    "rx_wav": f"exp4_distance_position/{slug}_t{t}.wav",
-                    "start_time": None,
-                    "notes": "",
-                }
-            )
-
     template_path = RECORDED_DIR / "manifest_template.json"
-    template_path.write_text(json.dumps(manifest_entries, indent=2), encoding="utf-8")
+    template_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
-    print(f"Generated {len(generated)} transmitted WAV + JSON pairs in {TRANSMITTED_DIR}")
-    print(f"Generated manifest template ({len(manifest_entries)} trial slots) -> {template_path}")
+    print(f"Generated {len(TRANSMISSIONS)} transmitted WAV + JSON pairs in {TRANSMITTED_DIR}")
+    print(f"Generated manifest template ({len(manifest)} trial slots) -> {template_path}")
     return 0
 
 

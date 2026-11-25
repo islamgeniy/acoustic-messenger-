@@ -22,7 +22,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run all 24 unit & software loopback tests
+# Run all unit & software loopback tests
 pytest -v
 ```
 
@@ -68,15 +68,12 @@ python scripts/decode_recording.py data/recorded/baseline/live_demo.wav \
 # 1. Generate all experiment TX WAV/JSON files + manifest template
 python scripts/prepare_experiment_audio.py
 
-# 2. Generate diagnostic plots for a single recorded WAV
-python scripts/run_experiment_analysis.py --single data/recorded/baseline/live_demo.wav \
-    --meta data/transmitted/baseline_32bit.json --out-dir results/plots/baseline
+# 2. Decode one recording and save its diagnostic plots
+python scripts/decode_recording.py data/recorded/baseline/live_demo.wav \
+    --meta data/transmitted/baseline_32bit.json --plot-dir results/plots/baseline
 
 # 3. Batch-evaluate all recorded trials -> results/trials.csv + results/plots/
 python scripts/run_experiment_analysis.py --manifest data/recorded/manifest.json
-
-# (Optional) Preview plots on synthetic channel before recording day
-python scripts/run_experiment_analysis.py --demo-sim
 ```
 
 ---

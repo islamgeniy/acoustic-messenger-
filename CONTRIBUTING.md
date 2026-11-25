@@ -40,7 +40,7 @@ git push -u origin <your-branch>
 
 To avoid merge conflicts, **do not modify `src/config.py` or `src/audio_io.py` inside feature branches** unless coordinated on `main`. Use the shared dataclasses:
 
-- `ModulationConfig` — `sample_rate`, `f0`, `f1`, `bit_duration`, `amplitude`, `lead_silence`, `trail_silence`, `use_preamble`, `preamble_bits`
+- `ModulationConfig` — `sample_rate`, `f0`, `f1`, `bit_duration`, `amplitude`, `lead_silence`, `trail_silence`
 - `TransmissionMetadata` — saved as `<wav_stem>.json` alongside every transmitted WAV
 - `BitDecision` & `DecodeResult` — returned by `src/rx.py` and consumed by `src/plotting.py` and `src/experiments.py`
 - `TrialRecord` — row schema for `results/trials.csv`

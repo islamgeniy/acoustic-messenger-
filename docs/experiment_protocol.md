@@ -58,7 +58,7 @@
 - **Fixed Factors:** `baseline_32bit.wav` ($1{,}000 / 2{,}000\text{ Hz}, T_b = 0.10\text{ s}$), fixed speaker volume, quiet room.
 - **Pre-Experiment Prediction:**
   - As distance increases ($0.5\text{ m} \rightarrow 2.0\text{ m} \rightarrow 5.0\text{ m}$), inverse-square spreading ($1/r$ amplitude) reduces received SNR smoothly, while the ratio of reflected room reverberation to direct path increases.
-  - In `2.0m NLOS (blocked)`, shorter wavelengths ($2{,}000\text{ Hz}$, $\lambda \approx 17\text{ cm}$) diffract less easily around obstacles and are absorbed more strongly than $1{,}000\text{ Hz}$ ($\lambda \approx 34\text{ cm}$). We predict **frequency-dependent attenuation** (shown in `exp4_distance_position_freq_attenuation.png`), causing weaker $f_1$ peaks and more `1 -> 0` bit errors, alongside visible reverberation tails on the STFT spectrogram.
+  - In `2.0m NLOS (blocked)`, shorter wavelengths ($2{,}000\text{ Hz}$, $\lambda \approx 17\text{ cm}$) diffract less easily around obstacles and are absorbed more strongly than $1{,}000\text{ Hz}$ ($\lambda \approx 34\text{ cm}$). We predict **frequency-dependent attenuation** (shown in `exp4_distance_position_tone_magnitudes.png`), causing weaker $f_1$ peaks and more `1 -> 0` bit errors, alongside visible reverberation tails on the STFT spectrogram.
 
 ---
 
@@ -81,4 +81,4 @@
    ```bash
    .venv/bin/python scripts/run_experiment_analysis.py --manifest data/recorded/manifest.json
    ```
-   This updates `results/trials.csv` and generates all labelled waveforms, spectrograms, bit-decision plots, pass-vs-fail bit spectra, BER/SNR curves, and the frequency-attenuation chart under `results/plots/`.
+   This updates `results/trials.csv` and generates all labelled waveforms, spectrograms, bit-decision plots, pass-vs-fail bit spectra, BER/decision-margin curves, and the per-setting tone-magnitude chart under `results/plots/`.

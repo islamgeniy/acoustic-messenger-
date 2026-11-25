@@ -8,8 +8,6 @@ import pytest
 from src.dft import (
     dft_frequencies,
     direct_dft,
-    direct_dft_matrix,
-    direct_idft,
     single_sided_spectrum,
     validate_dft_against_fft,
 )
@@ -21,19 +19,9 @@ def test_direct_dft_matches_numpy_fft(n_samples: int) -> None:
     x = rng.standard_normal(n_samples)
 
     x_direct = direct_dft(x)
-    x_matrix = direct_dft_matrix(x)
     x_fft = np.fft.fft(x)
 
     assert np.max(np.abs(x_direct - x_fft)) < 1e-11
-    assert np.max(np.abs(x_matrix - x_fft)) < 1e-11
-
-
-def test_direct_idft_reconstructs_signal() -> None:
-    rng = np.random.default_rng(7)
-    x = rng.standard_normal(64)
-    reconstructed = direct_idft(direct_dft(x))
-    assert np.max(np.abs(reconstructed.real - x)) < 1e-11
-    assert np.max(np.abs(reconstructed.imag)) < 1e-11
 
 
 def test_frequency_bins_and_two_tone_peaks() -> None:

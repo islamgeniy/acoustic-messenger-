@@ -9,12 +9,11 @@ import sys
 import numpy as np
 import pytest
 
-from src.audio_io import load_metadata, load_wav
+from src.audio_io import load_metadata, load_wav, save_wav
 from src.config import DEFAULT_TEST_BITS, ModulationConfig
 from src.tx import (
     bits_to_text,
     encode_to_wav,
-    generate_random_bits,
     modulate_fsk,
     text_to_bits,
     validate_bits,
@@ -30,7 +29,7 @@ def _dominant_freq_hz(segment: np.ndarray, sample_rate: int) -> float:
 
 def test_validate_bits_rules() -> None:
     assert validate_bits(DEFAULT_TEST_BITS) == DEFAULT_TEST_BITS
-    assert validate_bits("1011 0010_11100101 01101001 10010110") == DEFAULT_TEST_BITS
+    assert validate_bits("1011 0010 11100101 01101001 10010110") == DEFAULT_TEST_BITS
     assert validate_bits("1011", allow_short=True) == "1011"
 
     with pytest.raises(ValueError, match="at least 32"):
@@ -51,14 +50,6 @@ def test_text_bit_roundtrip() -> None:
     bits_long = text_to_bits("DFT Squad")
     assert len(bits_long) == 72
     assert bits_to_text(bits_long) == "DFT Squad"
-
-
-def test_generate_random_bits_deterministic() -> None:
-    b1 = generate_random_bits(40, seed=123)
-    b2 = generate_random_bits(40, seed=123)
-    assert b1 == b2
-    assert len(b1) == 40
-    assert set(b1) <= {"0", "1"}
 
 
 def test_slide4_example_1011_and_continuous_tone() -> None:
@@ -108,17 +99,10 @@ def test_phase_continuity_for_non_integer_cycles() -> None:
     assert max_step <= theoretical_max_step * 1.01
 
 
-def test_32bit_silence_and_preamble_lengths() -> None:
-    cfg = ModulationConfig(
-        sample_rate=48_000,
-        bit_duration=0.1,
-        lead_silence=0.5,
-        trail_silence=0.25,
-        use_preamble=True,
-        preamble_bits="10101010",
-    )
+def test_32bit_silence_lengths() -> None:
+    cfg = ModulationConfig(sample_rate=48_000, bit_duration=0.1, lead_silence=0.5, trail_silence=0.25)
     sig = modulate_fsk(DEFAULT_TEST_BITS, cfg)
-    expected_samples = int(round((0.5 + 0.25 + 40 * 0.1) * 48_000))
+    expected_samples = int(round((0.5 + 0.25 + 32 * 0.1) * 48_000))
     assert sig.size == expected_samples
     # Leading and trailing silence must be exact zeros
     assert np.all(sig[: int(round(0.5 * 48_000))] == 0.0)
@@ -139,7 +123,7 @@ def test_encode_to_wav_and_metadata_roundtrip(tmp_path: Path) -> None:
     assert meta_path.exists()
     assert meta.bits == text_to_bits("IUT!")
 
-    fs, loaded_sig = load_wav(wav_path, remove_dc=False)
+    fs, loaded_sig = load_wav(wav_path)
     loaded_meta = load_metadata(meta_path)
     assert fs == cfg.sample_rate
     assert loaded_sig.size == sig.size
@@ -172,3 +156,8 @@ def test_cli_encode_message(tmp_path: Path) -> None:
     assert "2-FSK Acoustic Transmitter" in proc.stdout
     assert out_wav.exists()
     assert out_wav.with_suffix(".json").exists()
+
+
+def test_save_wav_refuses_to_clip(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="clip"):
+        save_wav(tmp_path / "loud.wav", np.array([0.0, 1.5, -0.2]), 48_000)

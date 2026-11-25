@@ -15,13 +15,12 @@
      $$y(t) = (s * h)(t) + w(t)$$
    - Laptop B microphone + ADC samples $y(t)$ into a recorded WAV file (even if recorded at 44.1 kHz instead of 48 kHz, the receiver adapts using the WAV's own `sample_rate`).
 3. **Synchronization & Slicing (`src/rx.py`):**
-   - Remove DC offset (`signal - mean(signal)`).
-   - Locate payload start $t_0$ via either **manual `--start-time`**, **automatic in-band energy onset**, or **phase-invariant preamble matched filtering** (Hilbert envelope of cross-correlation).
+   - Locate payload start $t_0$ via either **manual `--start-time`** or **automatic in-band energy onset** (band-pass around $f_0$/$f_1$, then the first sustained rise of short-time RMS above the background noise).
    - Slice each bit interval $[t_0 + i T_b,\; t_0 + (i+1) T_b]$ with an optional 5% edge guard margin to avoid reverb spillover at transitions.
 4. **Windowing + FFT + Non-Coherent Detection (`src/rx.py`):**
    - Multiply each bit segment by a **Hann window** to suppress spectral leakage sidelobes.
    - Compute `numpy.fft.rfft` (zero-padded for smooth peak sampling), measure peak spectral magnitude near $f_0$ and $f_1$, and decide `'1'` if $|X(f_1)| > |X(f_0)|$ else `'0'`.
-   - Evaluate $\text{BER} = \frac{\text{incorrect bits}}{\text{transmitted bits}}$ and estimate per-bit SNR (dB) against the median out-of-band noise floor.
+   - Evaluate $\text{BER} = \frac{\text{incorrect bits}}{\text{transmitted bits}}$ and report each bit's **decision margin** $20\log_{10}(\text{stronger}/\text{weaker})$ in dB (0 dB = a coin flip).
 
 ---
 
@@ -55,4 +54,4 @@
 | **"Someone talks loudly at 200–500 Hz vs. plays a 1000 Hz tone?"** | Low-frequency speech is **out-of-band**: the time waveform looks messy, but the FFT bins near $1{,}000$ and $2{,}000\text{ Hz}$ stay clean (BER $\approx 0\%$). A $1{,}000\text{ Hz}$ tone is **in-band**: it injects energy directly into the `0` bin, causing `1 -> 0` errors whenever interference exceeds the received `1` tone. |
 | **"What if `start_time` is shifted by $+0.05\text{ s}$ (half a bit)?"** | Every slicing window now contains half of bit $i$ and half of bit $i+1$. Whenever adjacent bits differ (`01` or `10`), both $f_0$ and $f_1$ appear with roughly equal magnitude ($\approx 50\%$ each), so tiny noise decides the bit and BER spikes toward $25\text{–}50\%$ (while runs of identical bits like `11` still decode fine!). |
 | **"What happens when we move to 5 m or put a book in front of the speaker?"** | Distance drops SNR via $1/r$ attenuation and raises the reverb-to-direct ratio. Blocking line-of-sight (NLOS) attenuates $2{,}000\text{ Hz}$ ($\lambda \approx 17\text{ cm}$) more strongly than $1{,}000\text{ Hz}$ ($\lambda \approx 34\text{ cm}$) due to weaker diffraction and stronger absorption, skewing errors toward `1 -> 0`. |
-| **"Why did we zero-pad the FFT in `measure_bit_spectrum`?"** | Zero-padding interpolates the DTFT on a finer frequency grid so we sample closer to the true spectral peak (helpful when $f_1$ isn't on an exact bin), **without** improving true physical resolution (which is still strictly governed by $1/T_b$). |
+| **"Why did we zero-pad the FFT in `bit_spectrum`?"** | Zero-padding interpolates the DTFT on a finer frequency grid so we sample closer to the true spectral peak (helpful when $f_1$ isn't on an exact bin), **without** improving true physical resolution (which is still strictly governed by $1/T_b$). |

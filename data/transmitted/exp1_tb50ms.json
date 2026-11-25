@@ -7,12 +7,10 @@
     "bit_duration": 0.05,
     "amplitude": 0.8,
     "lead_silence": 0.5,
-    "trail_silence": 0.5,
-    "use_preamble": false,
-    "preamble_bits": "10101010"
+    "trail_silence": 0.5
   },
   "text": null,
   "wav_path": "exp1_tb50ms.wav",
-  "created_at": "2026-11-25T17:28:04+00:00",
+  "created_at": "2026-11-25T17:45:23+00:00",
   "notes": "Exp 1 Bit Duration: Tb=50 ms"
 }

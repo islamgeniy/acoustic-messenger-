@@ -79,22 +79,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.decode_meta is not None:
         meta = load_metadata(args.decode_meta)
-        res = decode_wav(
-            out_wav,
-            num_bits=len(meta.bits),
-            config=meta.config,
-            start_time=args.start_time,
-            expected_bits=meta.bits,
-        )
+        res, _, _ = decode_wav(out_wav, len(meta.bits), meta.config, start_time=args.start_time, expected_bits=meta.bits)
         print("\n=== Immediate Decode Result ===")
         print(f"Sync         : {res.sync_method} (start = {res.start_time:.4f} s)")
         print(f"Decoded bits : {res.decoded_bits}")
         print(f"Expected     : {meta.bits}")
-        assert res.bit_errors is not None and res.ber is not None
         print(f"Bit errors   : {res.bit_errors} / {len(meta.bits)}")
         print(f"BER          : {res.ber:.4f} ({res.ber * 100:.2f}%)")
-        if res.mean_snr_db is not None:
-            print(f"Mean SNR     : {res.mean_snr_db:.2f} dB")
+        print(f"Mean margin  : {res.mean_margin_db:.1f} dB")
 
     return 0
 
